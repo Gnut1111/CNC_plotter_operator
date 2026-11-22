@@ -1,7 +1,7 @@
 const http = require("http");
 const express = require("express");
 const config = require("./config");
-const { startBroker } = require("./mqttBroker");
+const { startBroker, portError } = require("./mqttBroker");
 
 if (process.env.EMBEDDED_BROKER !== "false") startBroker();
 
@@ -26,6 +26,7 @@ app.use((err, req, res, next) => {
 });
 
 const server = http.createServer(app);
+server.on("error", (e) => portError(e, config.httpPort, "HTTP_PORT"));
 realtime.attach(server);
 statusService.start();
 server.listen(config.httpPort, () => console.log(`[http] http://localhost:${config.httpPort}`));

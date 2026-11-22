@@ -40,8 +40,18 @@ function startBroker() {
   };
 
   const server = net.createServer(broker.handle);
+  server.on("error", (e) => portError(e, config.mqttPort, "MQTT_PORT"));
   server.listen(config.mqttPort, () => console.log(`[mqtt] broker listening on :${config.mqttPort}`));
   return broker;
 }
 
-module.exports = { startBroker };
+function portError(e, port, envName) {
+  if (e.code !== "EADDRINUSE") throw e;
+  console.error(`\n[LỖI] Cổng ${port} đang bị chương trình khác dùng (có thể là server cũ chưa tắt).`);
+  console.error(`  → Xem ai đang dùng:  ss -ltnp | grep ${port}`);
+  console.error(`  → Hoặc tắt server cũ: pkill -f "node src/index.js"`);
+  console.error(`  → Hoặc đổi cổng:      ${envName}=<cổng khác> npm start\n`);
+  process.exit(1);
+}
+
+module.exports = { startBroker, portError };
