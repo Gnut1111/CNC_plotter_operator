@@ -60,6 +60,27 @@ Sơ đồ pipeline (vẽ thành chuỗi khối ngang):
 
 Hình: chụp màn hình ảnh gốc cạnh bản xem trước G-code.
 
+### Slide 6b — Tự động tìm cấu hình vẽ giống ảnh gốc nhất
+**Tiêu đề:** IV.2b Tự động chọn tham số chuyển đổi
+
+1. **Tách nét tự động:** ngưỡng Otsu; tự chuyển sang ngưỡng thích nghi khi ảnh sáng không đều; tự đảo màu khi nền tối; xóa đốm nhiễu.
+2. **Kiểu nét mới "Viền + tô gạch":** lấp mảng đặc bằng các đường song song cách nhau theo bề rộng bút.
+3. **Chấm điểm độ giống:** vẽ ngược G-code ra ảnh (có tính bề rộng bút) rồi so với ảnh gốc:
+   - *Sai lệch Chamfer (mm)*: trung bình khoảng cách nét vẽ ↔ nét gốc gần nhất (2 chiều).
+   - *IoU (%)*: tỉ lệ trùng khớp diện tích nét.
+4. **Dò tham số:** thử 36 bộ (3 kiểu nét × 4 mức chi tiết × 3 mức làm mượt) trong ~1–2 s, đưa ra 3 phương án: *Chi tiết* (lệch ít nhất), *Cân bằng*, *Nhanh* (nhanh nhất mà vẫn lệch ≤ 1 bề rộng bút).
+
+Hình: `docs/img/auto-tune/*-compare.png`. Bảng số liệu (`docs/img/auto-tune/results.md`, 4 ảnh mẫu tổng hợp, bút 0,5 mm, bản vẽ 150 mm):
+
+| Ảnh | Cấu hình cũ (ngưỡng 128, đường tâm) | Tự động – Chi tiết |
+|---|---|---|
+| Nét mảnh (line art) | lệch 0,21 mm · 26% | lệch 0,02 mm · 87% |
+| Logo mảng đặc | lệch 19,1 mm · 1% | lệch 0,00 mm · 99% |
+| Nền tối, nét sáng | lệch 19,3 mm · 0% | lệch 0,02 mm · 91% |
+| Ánh sáng không đều | lệch 1,32 mm · 15% | lệch 0,01 mm · 92% |
+
+> Lưu ý khi trình bày: các cột được chấm trên **cùng** ảnh tham chiếu (tách nét tự động). Đây là ảnh mẫu tổng hợp — nên chạy lại `tools/compare.js` với ảnh thật của nhóm, và sau khi có máy thật thì đo bản vẽ trên giấy để đối chiếu.
+
 ### Slide 7 — Hàng đợi & truyền file tới máy
 **Tiêu đề:** IV.3 Job Dispatcher – hàng đợi FIFO và truyền file qua MQTT
 
@@ -132,3 +153,5 @@ Ghi **lỗi thật** nhóm gặp khi tích hợp. Các vấn đề đã xử lý
 | Mất sự kiện "vẽ xong" khi máy rớt Wi-Fi | Bản tin phát sinh lúc offline | Máy lưu sự kiện, gửi bù khi kết nối lại |
 | Phiên đang truyền file thì máy rớt mạng | File nhận dở | Server đưa phiên về lại hàng đợi |
 | Máy lạ / máy khác chiếm topic | Broker mở | Xác thực token + ACL theo topic từng máy |
+| Góc vuông bị vạt chéo, hình chữ nhật có đường chéo lạ (phát hiện nhờ ảnh so sánh) | Làm mượt Chaikin chạy **sau** giản lược RDP → cắt góc tới 1/4 chiều dài cạnh (lỗi có từ code cũ) | Đảo thứ tự: làm mượt ở mức pixel trước rồi mới giản lược; góc vuông còn lệch ≤ 0,2 mm (liên quan TC17) |
+| Ảnh nền tối / chụp thiếu sáng ra bản vẽ sai hoàn toàn | Ngưỡng cố định 128 | Ngưỡng Otsu + ngưỡng thích nghi + tự đảo màu |

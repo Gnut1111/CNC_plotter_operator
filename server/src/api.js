@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 const config = require("./config");
 const { db, newToken } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
-const { convert, DEFAULTS } = require("./converter");
+const { convert, autoTune, DEFAULTS } = require("./converter");
 const dispatcher = require("./dispatcher");
 const { publicMachine } = require("./statusService");
 
@@ -42,17 +42,30 @@ function workAreaOf(machineId) {
 
 router.get("/converter/defaults", (req, res) => res.json({ defaults: DEFAULTS, workArea: config.workArea }));
 
-router.post("/drawings", upload.single("image"), wrap(async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "Chưa chọn ảnh" });
-  if (!isPngOrJpeg(req.file.buffer)) return res.status(400).json({ error: "Nội dung file không phải PNG/JPG hợp lệ" });
-
-  let result;
+/** Kiểm tra file tải lên + chạy hàm xử lý ảnh; trả null nếu đã gửi phản hồi lỗi */
+async function processUpload(req, res, fn) {
+  if (!req.file) { res.status(400).json({ error: "Chưa chọn ảnh" }); return null; }
+  if (!isPngOrJpeg(req.file.buffer)) { res.status(400).json({ error: "Nội dung file không phải PNG/JPG hợp lệ" }); return null; }
   try {
     const params = typeof req.body.params === "string" ? JSON.parse(req.body.params || "{}") : {};
-    result = await convert(req.file.buffer, params, workAreaOf(req.body.machineId));
+    return await fn(req.file.buffer, params, workAreaOf(req.body.machineId));
   } catch (e) {
-    return res.status(400).json({ error: `Không xử lý được ảnh: ${e.message}` });
+    res.status(400).json({ error: `Không xử lý được ảnh: ${e.message}` });
+    return null;
   }
+}
+
+// Tự dò tham số: trả về các phương án (không lưu bản vẽ)
+router.post("/drawings/auto", upload.single("image"), wrap(async (req, res) => {
+  const result = await processUpload(req, res, autoTune);
+  if (!result) return;
+  if (!result.candidates.length) return res.status(422).json({ error: "Không tìm thấy nét vẽ nào trong ảnh" });
+  res.json(result);
+}));
+
+router.post("/drawings", upload.single("image"), wrap(async (req, res) => {
+  const result = await processUpload(req, res, convert);
+  if (!result) return;
   const { gcode, params: used, stats } = result;
   if (stats.paths === 0) return res.status(422).json({ error: "Không tìm thấy nét vẽ nào — thử chỉnh ngưỡng hoặc đảo màu" });
 

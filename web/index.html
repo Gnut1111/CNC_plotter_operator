@@ -45,16 +45,37 @@
               <label>Rộng (mm) <input type="number" name="widthMm" value="150" min="10" /></label>
               <label>Cao (mm) <input type="number" name="heightMm" value="150" min="10" /></label>
             </div>
+            <label>Bề rộng nét bút (mm) <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.1" /></label>
+            <button type="button" id="autoBtn">✨ Tự động tìm cấu hình</button>
+            <div id="autoResult" class="auto-result"></div>
+
             <label>Mức chi tiết: <b id="detailVal">5</b> <input type="range" name="detail" min="1" max="10" value="5" /></label>
-            <label>Ngưỡng tách nét: <b id="thresholdVal">128</b> <input type="range" name="threshold" min="1" max="254" value="128" /></label>
+            <label>Tách nét
+              <select name="thresholdMode">
+                <option value="auto">Tự động (Otsu / thích nghi)</option>
+                <option value="adaptive">Thích nghi (ảnh chụp, sáng không đều)</option>
+                <option value="manual">Thủ công</option>
+              </select>
+            </label>
+            <label id="thresholdRow" class="hidden">Ngưỡng: <b id="thresholdVal">128</b> <input type="range" name="threshold" min="1" max="254" value="128" /></label>
             <label>Kiểu nét
               <select name="mode">
                 <option value="centerline">Đường tâm (làm mảnh nét)</option>
                 <option value="outline">Đường viền</option>
+                <option value="fill">Viền + tô gạch (mảng đặc)</option>
               </select>
             </label>
-            <label>Làm mượt <select name="smoothing"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
-            <label class="check"><input type="checkbox" name="invert" /> Đảo màu (nét sáng trên nền tối)</label>
+            <div class="row">
+              <label>Làm mượt <select name="smoothing"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
+              <label>Đảo màu
+                <select name="invert">
+                  <option value="auto">Tự động</option>
+                  <option value="false">Không</option>
+                  <option value="true">Có (nét sáng, nền tối)</option>
+                </select>
+              </label>
+            </div>
+            <label class="check"><input type="checkbox" name="despeckle" checked /> Xóa đốm nhiễu nhỏ</label>
             <details>
               <summary>Nâng cao</summary>
               <div class="row">

@@ -12,12 +12,15 @@ Mọi API (trừ đăng nhập) cần header `Authorization: Bearer <JWT>`.
 | Method | Path | Mô tả |
 |---|---|---|
 | POST | `/api/drawings` | multipart: `image` (PNG/JPG ≤ 5 MB), `params` (JSON), `machineId` (tùy chọn, lấy vùng vẽ). → `{drawing, gcode}`. Sai định dạng → 400, quá dung lượng → 413, không có nét → 422 |
+| POST | `/api/drawings/auto` | Như trên nhưng **không lưu**: thử ~36 bộ tham số, trả `{candidates: [{label, params, metrics}], reference, tried, ms}` — 3 phương án Chi tiết / Cân bằng / Nhanh |
 | GET | `/api/drawings` | Bản vẽ của tôi |
 | GET | `/api/drawings/:id/gcode` | File G-code |
 | GET | `/api/drawings/:id/image` | Ảnh gốc |
 | GET | `/api/converter/defaults` | Tham số mặc định |
 
-`params`: `widthMm, heightMm, detail (1–10), threshold (1–254), invert, mode ("centerline"|"outline"), smoothing (0–3), drawFeed, travelFeed, penUp, penDown`.
+`params`: `widthMm, heightMm, detail (1–10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), despeckle (bool), penWidthMm, drawFeed, travelFeed, penUp, penDown`.
+
+`stats` / `metrics` của bản vẽ: `chamferMm` (sai lệch trung bình so với ảnh gốc, mm — càng nhỏ càng giống), `extraMm` (vẽ thừa), `missMm` (bỏ sót), `iou` (% trùng khớp nét), `minutes` (thời gian vẽ ước lượng), `paths`, `drawLengthMm`, `travelMm`, `binarize` (cách tách nét đã chọn).
 
 ## Máy & phiên vẽ
 | Method | Path | Mô tả |

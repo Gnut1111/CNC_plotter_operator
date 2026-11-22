@@ -55,6 +55,14 @@ Trên WSL2, cần forward cổng từ Windows hoặc bật mirrored networking.
 
 Xóa `server/data/` để reset CSDL về dữ liệu mẫu.
 
+## So sánh chất lượng chuyển đổi (cho báo cáo)
+
+```bash
+cd server
+node tools/compare.js ../docs/samples/*.png ../docs/samples/*.jpg --out ../docs/img/auto-tune
+```
+Tạo ảnh so sánh (ảnh gốc | cấu hình cũ | 3 phương án tự động) và bảng `results.md`. Thay bằng ảnh thật của nhóm để có số liệu đưa vào slide.
+
 ## Tài liệu
 - [Giao thức MQTT Server ⇄ Máy](docs/mqtt-protocol.md) — **nhóm firmware đọc file này**
 - [REST API & WebSocket](docs/api.md)

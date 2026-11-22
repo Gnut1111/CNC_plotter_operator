@@ -84,29 +84,48 @@ $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 const form = $("#convertForm");
 form.detail.oninput = () => ($("#detailVal").textContent = form.detail.value);
 form.threshold.oninput = () => ($("#thresholdVal").textContent = form.threshold.value);
+form.thresholdMode.onchange = () => $("#thresholdRow").classList.toggle("hidden", form.thresholdMode.value !== "manual");
+form.image.onchange = () => { $("#autoResult").innerHTML = ""; };
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const file = form.image.files[0];
-  if (!file) return;
-  const params = {
+const MODE_VI = { centerline: "Đường tâm", outline: "Đường viền", fill: "Viền + tô gạch" };
+const METHOD_VI = { otsu: "Otsu", adaptive: "thích nghi", fixed: "thủ công" };
+
+function readParams() {
+  const tm = form.thresholdMode.value;
+  return {
     widthMm: +form.widthMm.value, heightMm: +form.heightMm.value, detail: +form.detail.value,
-    threshold: +form.threshold.value, mode: form.mode.value, smoothing: +form.smoothing.value,
-    invert: form.invert.checked, drawFeed: +form.drawFeed.value, travelFeed: +form.travelFeed.value,
+    threshold: tm === "manual" ? +form.threshold.value : tm,
+    invert: form.invert.value, mode: form.mode.value, smoothing: +form.smoothing.value,
+    despeckle: form.despeckle.checked, penWidthMm: +form.penWidthMm.value,
+    drawFeed: +form.drawFeed.value, travelFeed: +form.travelFeed.value,
     penUp: form.penUp.value, penDown: form.penDown.value,
   };
+}
+
+function uploadData(params) {
+  const file = form.image.files[0];
+  if (!file) { toast("Chọn ảnh trước đã", "warn"); return null; }
   const fd = new FormData();
   fd.append("image", file);
   fd.append("name", file.name);
   fd.append("params", JSON.stringify(params));
   if (app.selectedMachine) fd.append("machineId", app.selectedMachine);
+  return fd;
+}
+
+const fmtMetrics = (m) => `lệch ${m.chamferMm} mm · trùng khớp ${m.iou}% · ~${m.minutes} phút · ${m.paths} nét`;
+
+async function runConvert(params) {
+  const fd = uploadData(params);
+  if (!fd) return;
   $("#convertBtn").disabled = true;
   $("#convertMsg").textContent = "Đang chuyển đổi…";
   try {
     const r = await api("/drawings", { method: "POST", body: fd });
     app.drawing = r.drawing; app.gcode = r.gcode;
-    const s = r.drawing.stats;
-    $("#stats").textContent = `${s.paths} nét · ${s.lines} dòng G-code · tổng chiều dài vẽ ${s.drawLengthMm} mm · vùng [${s.bbox.join(", ")}] mm`;
+    const s = r.drawing.stats, b = s.binarize;
+    $("#stats").innerHTML = `${esc(fmtMetrics(s))}<br/>${s.lines} dòng G-code · vẽ ${s.drawLengthMm} mm, chạy không ${s.travelMm} mm<br/>
+      Tách nét: ${METHOD_VI[b.method]}${b.method !== "adaptive" ? ` (ngưỡng ${b.level})` : ""} · đảo màu: ${b.invert ? "có" : "không"}`;
     $("#gcodeText").textContent = r.gcode.length > 200000 ? r.gcode.slice(0, 200000) + "\n…" : r.gcode;
     $("#convertMsg").textContent = `Đã tạo bản vẽ #${r.drawing.id}`;
     drawPreview();
@@ -115,6 +134,48 @@ form.addEventListener("submit", async (e) => {
     $("#convertMsg").textContent = "";
     toast(err.message, "err");
   } finally { $("#convertBtn").disabled = false; }
+}
+
+form.addEventListener("submit", (e) => { e.preventDefault(); runConvert(readParams()); });
+
+// Đưa bộ tham số của một phương án lên form
+function applyParams(p) {
+  form.detail.value = p.detail; $("#detailVal").textContent = p.detail;
+  form.mode.value = p.mode;
+  form.smoothing.value = String(p.smoothing);
+  if (p.threshold === "adaptive") form.thresholdMode.value = "adaptive";
+  else { form.thresholdMode.value = "manual"; form.threshold.value = p.threshold; $("#thresholdVal").textContent = p.threshold; }
+  form.thresholdMode.onchange();
+  form.invert.value = String(p.invert);
+}
+
+$("#autoBtn").onclick = async () => {
+  const fd = uploadData(readParams());
+  if (!fd) return;
+  const btn = $("#autoBtn");
+  btn.disabled = true;
+  btn.textContent = "Đang thử các cấu hình…";
+  $("#autoResult").innerHTML = "";
+  try {
+    const r = await api("/drawings/auto", { method: "POST", body: fd });
+    app.autoCandidates = r.candidates;
+    $("#autoResult").innerHTML = `<small class="muted">Đã thử ${r.tried} cấu hình trong ${(r.ms / 1000).toFixed(1)} s — chọn một phương án:</small>` +
+      r.candidates.map((c, i) => `
+      <div class="cand ${i === 0 ? "best" : ""}">
+        <div class="row-between"><b>${esc(c.label)}</b><small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small></div>
+        <div class="metrics"><span>Lệch <b>${c.metrics.chamferMm} mm</b></span><span>Trùng khớp <b>${c.metrics.iou}%</b></span><span>~<b>${c.metrics.minutes}</b> phút</span><span>${c.metrics.paths} nét</span></div>
+        <button type="button" class="small" data-cand="${i}">Dùng phương án này</button>
+      </div>`).join("");
+  } catch (err) { toast(err.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = "✨ Tự động tìm cấu hình"; }
+};
+
+$("#autoResult").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-cand]");
+  if (!b) return;
+  const c = app.autoCandidates[+b.dataset.cand];
+  applyParams(c.params);
+  runConvert({ ...readParams(), ...c.params });
 });
 
 // ---------------- G-code Viewer ----------------
