@@ -1,0 +1,14 @@
+{
+  "name": "cnc-simulator",
+  "version": "1.0.0",
+  "description": "",
+  "main": "sim.js",
+  "scripts": {
+    "start": "node sim.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mqtt": "^5.16.1"
+  }
+}

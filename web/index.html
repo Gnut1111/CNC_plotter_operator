@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pixel2Plot Operator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Auth View -->
+  <section id="loginView" class="login hidden">
+    <form id="loginForm" class="card login-card">
+      <h1>Pixel2Plot</h1>
+      <p class="muted">Hệ thống điều khiển máy vẽ CNC</p>
+      <label>Tên đăng nhập <input name="username" autocomplete="username" required /></label>
+      <label>Mật khẩu <input name="password" type="password" autocomplete="current-password" required /></label>
+      <button class="primary" type="submit">Đăng nhập</button>
+      <p id="loginError" class="error"></p>
+    </form>
+  </section>
+
+  <section id="appView" class="hidden">
+    <header class="topbar">
+      <strong>Pixel2Plot</strong>
+      <nav id="tabs">
+        <button data-tab="draw" class="active">Vẽ mới</button>
+        <button data-tab="jobs">Phiên vẽ</button>
+        <button data-tab="machines">Máy</button>
+        <button data-tab="admin" class="admin-only">Quản trị</button>
+      </nav>
+      <span class="spacer"></span>
+      <span id="wsDot" class="dot" title="Realtime"></span>
+      <span id="whoami" class="muted"></span>
+      <button id="logoutBtn">Đăng xuất</button>
+    </header>
+
+    <main>
+      <!-- Image Uploader + G-code Viewer + Machine Selector -->
+      <div id="tab-draw" class="tab">
+        <div class="grid-draw">
+          <form id="convertForm" class="card">
+            <h2>1. Tải ảnh &amp; tham số</h2>
+            <label>Ảnh (PNG/JPG, ≤ 5 MB) <input type="file" name="image" accept="image/png,image/jpeg" required /></label>
+            <div class="row">
+              <label>Rộng (mm) <input type="number" name="widthMm" value="150" min="10" /></label>
+              <label>Cao (mm) <input type="number" name="heightMm" value="150" min="10" /></label>
+            </div>
+            <label>Mức chi tiết: <b id="detailVal">5</b> <input type="range" name="detail" min="1" max="10" value="5" /></label>
+            <label>Ngưỡng tách nét: <b id="thresholdVal">128</b> <input type="range" name="threshold" min="1" max="254" value="128" /></label>
+            <label>Kiểu nét
+              <select name="mode">
+                <option value="centerline">Đường tâm (làm mảnh nét)</option>
+                <option value="outline">Đường viền</option>
+              </select>
+            </label>
+            <label>Làm mượt <select name="smoothing"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
+            <label class="check"><input type="checkbox" name="invert" /> Đảo màu (nét sáng trên nền tối)</label>
+            <details>
+              <summary>Nâng cao</summary>
+              <div class="row">
+                <label>Tốc độ vẽ (mm/ph) <input type="number" name="drawFeed" value="1500" /></label>
+                <label>Tốc độ chạy không <input type="number" name="travelFeed" value="3000" /></label>
+              </div>
+              <div class="row">
+                <label>Lệnh nâng bút <input name="penUp" value="M5" /></label>
+                <label>Lệnh hạ bút <input name="penDown" value="M3 S90" /></label>
+              </div>
+            </details>
+            <button class="primary" type="submit" id="convertBtn">Chuyển sang G-code</button>
+            <p id="convertMsg" class="muted"></p>
+          </form>
+
+          <div class="card">
+            <h2>2. Xem trước</h2>
+            <div class="preview-wrap">
+              <canvas id="preview" width="600" height="600"></canvas>
+            </div>
+            <label class="check"><input type="checkbox" id="showTravel" checked /> Hiện đường chạy không (nét đứt)</label>
+            <p id="stats" class="muted"></p>
+            <details><summary>G-code</summary><pre id="gcodeText"></pre></details>
+          </div>
+
+          <div class="card">
+            <h2>3. Chọn máy &amp; gửi</h2>
+            <div id="machinePick" class="machine-pick"></div>
+            <button class="primary" id="sendBtn" disabled>Gửi xuống máy</button>
+            <p id="sendMsg" class="muted"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Job List + Job Control -->
+      <div id="tab-jobs" class="tab hidden">
+        <div class="card">
+          <div class="row-between">
+            <h2>Phiên vẽ</h2>
+            <label class="check admin-only"><input type="checkbox" id="allJobs" /> Xem tất cả người dùng</label>
+          </div>
+          <table class="table">
+            <thead><tr><th>#</th><th>Bản vẽ</th><th>Máy</th><th>Người gửi</th><th>Trạng thái</th><th>Tiến độ</th><th>Tạo lúc</th><th></th></tr></thead>
+            <tbody id="jobRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab-machines" class="tab hidden">
+        <div id="machineCards" class="machine-cards"></div>
+      </div>
+
+      <!-- Admin Dashboard -->
+      <div id="tab-admin" class="tab hidden">
+        <div class="grid-admin">
+          <div class="card">
+            <h2>Máy</h2>
+            <table class="table"><thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th>Vùng vẽ</th><th>Token MQTT</th><th></th></tr></thead><tbody id="admMachines"></tbody></table>
+            <form id="addMachineForm" class="row inline-form">
+              <input name="id" placeholder="mã máy (vd cnc-02)" required />
+              <input name="name" placeholder="tên hiển thị" />
+              <input name="workWidth" type="number" placeholder="rộng mm" value="200" />
+              <input name="workHeight" type="number" placeholder="cao mm" value="200" />
+              <button>Thêm máy</button>
+            </form>
+          </div>
+          <div class="card">
+            <h2>Người dùng</h2>
+            <table class="table"><thead><tr><th>#</th><th>Tên</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody id="admUsers"></tbody></table>
+            <form id="addUserForm" class="row inline-form">
+              <input name="username" placeholder="tên đăng nhập" required />
+              <input name="password" type="password" placeholder="mật khẩu ≥ 6" required />
+              <select name="role"><option value="user">user</option><option value="admin">admin</option></select>
+              <button>Tạo tài khoản</button>
+            </form>
+          </div>
+          <div class="card">
+            <h2>Hàng đợi</h2>
+            <table class="table"><thead><tr><th>#</th><th>Máy</th><th>Bản vẽ</th><th>Người gửi</th><th>Trạng thái</th></tr></thead><tbody id="admQueue"></tbody></table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- Notification UI -->
+  <div id="toasts" class="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
