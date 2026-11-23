@@ -3,206 +3,410 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pixel2Plot Operator</title>
+  <title>Pixel2Plot Operator — Điều khiển máy vẽ CNC</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- Auth View -->
   <section id="loginView" class="login hidden">
     <form id="loginForm" class="card login-card">
-      <h1>Pixel2Plot</h1>
-      <p class="muted">Hệ thống điều khiển máy vẽ CNC</p>
-      <label>Tên đăng nhập <input name="username" autocomplete="username" required /></label>
-      <label>Mật khẩu <input name="password" type="password" autocomplete="current-password" required /></label>
-      <button class="primary" type="submit">Đăng nhập</button>
-      <p id="loginError" class="error"></p>
+      <div class="login-brand">
+        <span class="brand-glyph">P2P</span>
+        <div class="brand-text">
+          <h1>Pixel2Plot</h1>
+          <p class="muted">Hệ thống điều khiển máy vẽ CNC</p>
+        </div>
+      </div>
+      <label>Tên đăng nhập
+        <input name="username" autocomplete="username" placeholder="Tên đăng nhập" required />
+      </label>
+      <label>Mật khẩu
+        <input name="password" type="password" autocomplete="current-password" placeholder="Mật khẩu" required />
+      </label>
+      <button class="primary login-submit" type="submit">Đăng nhập</button>
+      <p id="loginError" class="error" role="alert"></p>
+      <div class="login-hint muted">
+        Tài khoản mẫu: <code>admin</code> / <code>admin123</code> hoặc <code>user</code> / <code>user123</code>
+      </div>
     </form>
   </section>
 
   <section id="appView" class="hidden">
     <header class="topbar">
-      <strong>Pixel2Plot</strong>
-      <nav id="tabs">
+      <div class="topbar-brand">
+        <span class="brand-logo">Pixel2Plot</span>
+        <span class="brand-divider">/</span>
+        <span class="brand-tag">Operator</span>
+      </div>
+      <nav id="tabs" aria-label="Điều hướng chính">
         <button data-tab="draw" class="active">Vẽ mới</button>
         <button data-tab="jobs">Phiên vẽ</button>
-        <button data-tab="machines">Máy</button>
+        <button data-tab="machines">Máy vẽ</button>
         <button data-tab="admin" class="admin-only">Quản trị</button>
       </nav>
       <span class="spacer"></span>
-      <span id="wsDot" class="connection"><span class="dot" aria-hidden="true"></span><span id="wsLabel">Đang kết nối</span></span>
-      <span id="whoami" class="muted"></span>
-      <button id="logoutBtn">Đăng xuất</button>
+      <div class="topbar-status">
+        <span id="wsDot" class="connection" title="Trạng thái kết nối WebSocket">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="wsLabel">Đang kết nối</span>
+        </span>
+        <span class="user-pill">
+          <span id="whoami" class="user-name"></span>
+        </span>
+        <button id="logoutBtn" class="small ghost">Đăng xuất</button>
+      </div>
     </header>
 
     <main>
-      <!-- Image Uploader + G-code Viewer + Machine Selector -->
+      <!-- Tab 1: Drawing Workspace -->
       <div id="tab-draw" class="tab">
+        <!-- Workflow Guide Bar -->
+        <nav class="workflow-stepper" aria-label="Quy trình vận hành">
+          <div class="step-badge active" id="stepIndicator1">
+            <span class="step-num">1</span>
+            <span class="step-text">Chọn ảnh</span>
+          </div>
+          <span class="step-sep" aria-hidden="true">/</span>
+          <div class="step-badge" id="stepIndicator2">
+            <span class="step-num">2</span>
+            <span class="step-text">Kiểm tra đường vẽ</span>
+          </div>
+          <span class="step-sep" aria-hidden="true">/</span>
+          <div class="step-badge" id="stepIndicator3">
+            <span class="step-num">3</span>
+            <span class="step-text">Chọn máy và gửi</span>
+          </div>
+          <span class="step-sep" aria-hidden="true">/</span>
+          <div class="step-badge" id="stepIndicator4">
+            <span class="step-num">4</span>
+            <span class="step-text">Theo dõi phiên</span>
+          </div>
+        </nav>
+
         <div class="grid-draw">
-          <section class="draw-source" aria-labelledby="sourceTitle">
-            <h2 id="sourceTitle" class="pane-title">Ảnh đầu vào</h2>
-            <div class="pane-body">
-              <input id="sourceFile" class="visually-hidden" type="file" form="convertForm" name="image" accept="image/png,image/jpeg" aria-describedby="fileInfo" />
-              <label for="sourceFile" class="file-button">Chọn ảnh</label>
-              <p id="fileInfo" class="muted">PNG hoặc JPG · tối đa 5 MB</p>
-              <p id="fileError" class="error" role="alert" hidden></p>
-            </div>
-          </section>
-
-          <section class="draw-preview" aria-labelledby="previewTitle">
-            <h2 id="previewTitle" class="pane-title">Bàn vẽ</h2>
-            <div class="preview-toolbar">
-              <div class="segmented" role="group" aria-label="Chế độ xem">
-                <button type="button" id="pathsView" aria-pressed="true" disabled>Đường vẽ</button>
-                <button type="button" id="imageView" aria-pressed="false" disabled>Ảnh gốc</button>
+          <!-- Main Left Column: Preview Viewport -->
+          <section class="draw-viewport card" aria-labelledby="previewTitle">
+            <div class="viewport-header">
+              <div class="source-picker">
+                <input id="sourceFile" class="visually-hidden" type="file" form="convertForm" name="image" accept="image/png,image/jpeg" aria-describedby="fileInfo" />
+                <label for="sourceFile" class="file-button" id="fileBtnLabel">Chọn ảnh</label>
+                <span id="fileInfo" class="file-info-text">PNG hoặc JPG · tối đa 5 MB</span>
               </div>
-              <label class="check"><input type="checkbox" id="showTravel" disabled /> Đường chạy không</label>
+              <div class="viewport-controls">
+                <div class="segmented" role="group" aria-label="Chế độ xem">
+                  <button type="button" id="pathsView" aria-pressed="true" disabled>Đường vẽ</button>
+                  <button type="button" id="imageView" aria-pressed="false" disabled>Ảnh gốc</button>
+                </div>
+                <label class="check travel-toggle">
+                  <input type="checkbox" id="showTravel" disabled />
+                  <span>Đường chạy không</span>
+                </label>
+              </div>
             </div>
-            <div class="preview-wrap">
+
+            <p id="fileError" class="error banner-error" role="alert" hidden></p>
+
+            <!-- Canvas Viewport -->
+            <div class="preview-wrap" id="dropZone" tabindex="0" role="region" aria-label="Bàn vẽ">
               <canvas id="preview" aria-label="Bản xem trước theo tọa độ máy"></canvas>
-              <p id="emptyPreview">Chọn ảnh để xem đường vẽ.</p>
+              <div id="emptyPreview" class="empty-state">
+                <span class="empty-glyph" aria-hidden="true">+</span>
+                <h3>Chưa có ảnh đầu vào</h3>
+                <p>Bấm Chọn ảnh hoặc kéo thả file ảnh PNG/JPG vào bàn vẽ để tạo đường chạy dao.</p>
+              </div>
             </div>
-            <p id="convertMsg" class="preview-status" role="status"></p>
-            <button type="button" id="retryPreview" class="hidden">Thử lại</button>
-            <p id="stats" class="preview-stats muted"></p>
+
+            <!-- Viewport Footer: Status & Metrics -->
+            <div class="viewport-footer">
+              <div class="status-row">
+                <div id="convertMsg" class="preview-status" role="status"></div>
+                <button type="button" id="retryPreview" class="small ghost hidden">Thử lại</button>
+              </div>
+              <div id="stats" class="preview-stats tabular-nums" aria-live="polite"></div>
+            </div>
+
+            <!-- Active Job Quick Monitor (Appears when drawing job is active) -->
+            <div id="activeJobBar" class="active-job-bar hidden" role="region" aria-label="Phiên vẽ đang chạy">
+              <div class="active-job-info">
+                <span class="active-job-pulse" aria-hidden="true"></span>
+                <span id="activeJobTitle" class="active-job-title">Đang vẽ</span>
+                <span id="activeJobBadge"></span>
+              </div>
+              <div class="active-job-progress">
+                <div class="bar"><span id="activeJobBarFill" style="width: 0%"></span></div>
+                <span id="activeJobPercent" class="active-job-pct tabular-nums">0%</span>
+              </div>
+              <div id="activeJobActions" class="active-job-actions"></div>
+            </div>
           </section>
 
-          <aside class="draw-tools">
-            <form id="convertForm">
-              <div class="pane-title pane-title-actions">
-                <h2>Thiết lập bản vẽ</h2>
-                <button type="button" id="resetSettings" class="small">Đặt lại</button>
+          <!-- Right Sidebar Column: Machine Dispatch & Drawing Parameters -->
+          <aside class="draw-sidebar">
+            <!-- Machine Dispatch Panel -->
+            <section class="card dispatch-card" aria-labelledby="machineTitle">
+              <div class="pane-title">
+                <h2 id="machineTitle">Máy nhận và lệnh vẽ</h2>
               </div>
               <div class="pane-body">
-                <div class="row">
-                  <label>Rộng tối đa (mm) <input type="number" name="widthMm" value="150" min="10" step="any" required /></label>
-                  <label>Cao tối đa (mm) <input type="number" name="heightMm" value="150" min="10" step="any" required /></label>
+                <div id="machinePick" class="machine-pick-wrapper"></div>
+                <div class="dispatch-actions">
+                  <button type="button" class="primary send-btn" id="sendBtn" disabled>
+                    <span class="btn-text">Gửi bản vẽ</span>
+                  </button>
+                  <button type="button" class="ghost download-btn" id="downloadBtn" disabled title="Tải file G-code về máy">
+                    Tải G-code
+                  </button>
                 </div>
-                <p class="muted option-hint">Giữ tỷ lệ ảnh và căn giữa vùng máy.</p>
-                <label>Mức chi tiết <output id="detailVal">5</output> <input type="range" name="detail" min="1" max="10" value="5" /></label>
-                <label>Kiểu nét
-                  <select name="mode">
-                    <option value="centerline">Đường tâm</option>
-                    <option value="outline">Đường viền</option>
-                    <option value="fill">Viền + tô gạch</option>
-                  </select>
-                </label>
-                <details>
-                  <summary>Tùy chọn nâng cao</summary>
-                  <label>Tách nét
-                    <select name="thresholdMode">
-                      <option value="auto">Tự động</option>
-                      <option value="adaptive">Thích nghi với ánh sáng</option>
-                      <option value="manual">Thủ công</option>
-                    </select>
-                  </label>
-                  <label id="thresholdRow" class="hidden">Ngưỡng <output id="thresholdVal">128</output> <input type="range" name="threshold" min="1" max="254" value="128" /></label>
-                  <div class="row">
-                    <label>Làm mượt <select name="smoothing"><option>0</option><option selected>1</option><option>2</option><option>3</option></select></label>
-                    <label>Đảo màu
-                      <select name="invert">
-                        <option value="auto">Tự động</option>
-                        <option value="false">Không</option>
-                        <option value="true">Có</option>
+                <div id="nextStepGuide" class="step-guide muted">
+                  <span id="guideText">Bước 1: Chọn ảnh để bắt đầu.</span>
+                </div>
+                <p id="sendMsg" class="send-status" role="status"></p>
+                <button type="button" id="showSentJob" class="small ghost hidden">Xem trong tab Phiên vẽ</button>
+                <details id="gcodeDetails" class="gcode-details hidden">
+                  <summary>Mã G-code</summary>
+                  <pre id="gcodeText" tabindex="0"></pre>
+                </details>
+              </div>
+            </section>
+
+            <!-- Settings Form Panel -->
+            <section class="card settings-card" aria-labelledby="settingsTitle">
+              <form id="convertForm">
+                <div class="pane-title pane-title-actions">
+                  <h2 id="settingsTitle">Thông số chuyển đổi</h2>
+                  <button type="button" id="resetSettings" class="small ghost" title="Khôi phục thông số mặc định">Đặt lại</button>
+                </div>
+                <div class="pane-body">
+                  <!-- Essential Controls -->
+                  <div class="form-row">
+                    <label>Rộng tối đa (mm)
+                      <input type="number" name="widthMm" value="150" min="10" step="any" required />
+                    </label>
+                    <label>Cao tối đa (mm)
+                      <input type="number" name="heightMm" value="150" min="10" step="any" required />
+                    </label>
+                  </div>
+                  <p class="muted option-hint">Giữ tỷ lệ ảnh và căn giữa vùng vẽ của máy.</p>
+
+                  <div class="control-group">
+                    <label class="slider-label">
+                      <span>Mức chi tiết</span>
+                      <output id="detailVal" class="val-pill tabular-nums">5</output>
+                    </label>
+                    <input type="range" name="detail" min="1" max="10" value="5" />
+                    <div class="range-labels muted"><span>Thô (nhanh)</span><span>Chi tiết (kỹ)</span></div>
+                  </div>
+
+                  <div class="control-group">
+                    <label>Kiểu nét
+                      <select name="mode">
+                        <option value="centerline">Đường tâm (nét đơn)</option>
+                        <option value="outline">Đường viền</option>
+                        <option value="fill">Viền và tô gạch</option>
                       </select>
                     </label>
                   </div>
-                  <div class="row form-row">
-                    <label>Dung sai giản lược (mm) <input type="number" name="simplifyMm" placeholder="Tự động" min="0.03" max="1" step="0.01" /></label>
-                    <label>Bước gạch / bề rộng bút <input type="number" name="hatchRatio" value="0.9" min="0.6" max="1" step="0.01" required /></label>
+
+                  <!-- Auto-tune button -->
+                  <div class="auto-tune-box">
+                    <button type="button" id="autoBtn" class="auto-btn ghost" disabled>Tìm cấu hình phù hợp</button>
+                    <div id="autoResult" class="auto-result" aria-live="polite"></div>
                   </div>
-                  <label>Bề rộng nét bút (mm) <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.1" required /></label>
-                  <label class="check"><input type="checkbox" name="despeckle" checked /> Xóa đốm nhiễu nhỏ</label>
-                  <div class="row">
-                    <label>Tốc độ vẽ (mm/phút) <input type="number" name="drawFeed" value="1500" min="100" max="10000" required /></label>
-                    <label>Chạy không (mm/phút) <input type="number" name="travelFeed" value="3000" min="100" max="10000" required /></label>
-                  </div>
-                  <div class="row">
-                    <label>Lệnh nâng bút <input name="penUp" value="M5" pattern="[A-Za-z0-9 .\-]{1,20}" required /></label>
-                    <label>Lệnh hạ bút <input name="penDown" value="M3 S90" pattern="[A-Za-z0-9 .\-]{1,20}" required /></label>
-                  </div>
-                </details>
-                <button type="button" id="autoBtn" disabled>Tìm cấu hình phù hợp</button>
-                <div id="autoResult" class="auto-result" aria-live="polite"></div>
-              </div>
-            </form>
-            <section aria-labelledby="machineTitle">
-              <h2 class="pane-title" id="machineTitle">Máy nhận bản vẽ</h2>
-              <div class="pane-body">
-                <div id="machinePick"></div>
-                <div class="draw-actions">
-                  <button type="button" id="downloadBtn" disabled>Tải G-code</button>
-                  <button type="button" class="primary" id="sendBtn" disabled>Gửi bản vẽ</button>
+
+                  <!-- Advanced Accordion -->
+                  <details id="advancedOptions" class="advanced-details">
+                    <summary>Tùy chọn nâng cao</summary>
+                    <div class="advanced-inner">
+                      <label>Tách nét nhị phân
+                        <select name="thresholdMode">
+                          <option value="auto">Tự động (Otsu)</option>
+                          <option value="adaptive">Thích nghi ánh sáng</option>
+                          <option value="manual">Thủ công</option>
+                        </select>
+                      </label>
+                      <label id="thresholdRow" class="hidden">Ngưỡng tách nét <output id="thresholdVal" class="val-pill tabular-nums">128</output>
+                        <input type="range" name="threshold" min="1" max="254" value="128" />
+                      </label>
+                      <div class="form-row">
+                        <label>Làm mượt
+                          <select name="smoothing">
+                            <option>0</option>
+                            <option selected>1</option>
+                            <option>2</option>
+                            <option>3</option>
+                          </select>
+                        </label>
+                        <label>Đảo màu
+                          <select name="invert">
+                            <option value="auto">Tự động</option>
+                            <option value="false">Không</option>
+                            <option value="true">Có</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label>Bề rộng nét bút (mm)
+                        <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.1" required />
+                      </label>
+                      <label class="check">
+                        <input type="checkbox" name="despeckle" checked />
+                        <span>Lọc đốm nhiễu nhỏ</span>
+                      </label>
+                      <div class="form-row">
+                        <label>Tốc độ vẽ (mm/phút)
+                          <input type="number" name="drawFeed" value="1500" min="100" max="10000" required />
+                        </label>
+                        <label>Chạy không (mm/phút)
+                          <input type="number" name="travelFeed" value="3000" min="100" max="10000" required />
+                        </label>
+                      </div>
+                      <div class="form-row">
+                        <label>Lệnh nâng bút
+                          <input name="penUp" value="M5" pattern="[A-Za-z0-9 .\-]{1,20}" required />
+                        </label>
+                        <label>Lệnh hạ bút
+                          <input name="penDown" value="M3 S90" pattern="[A-Za-z0-9 .\-]{1,20}" required />
+                        </label>
+                      </div>
+                    </div>
+                  </details>
                 </div>
-                <p id="sendMsg" class="muted" role="status"></p>
-                <button type="button" id="showSentJob" class="hidden">Xem phiên vẽ</button>
-                <details id="gcodeDetails" class="hidden"><summary>Xem G-code</summary><pre id="gcodeText" tabindex="0"></pre></details>
-              </div>
+              </form>
             </section>
           </aside>
         </div>
       </div>
 
-      <!-- Job List + Job Control -->
+      <!-- Tab 2: Job List + Job Control -->
       <div id="tab-jobs" class="tab hidden">
-        <div class="card">
-          <div class="row-between">
-            <h2>Phiên vẽ</h2>
-            <label class="check admin-only"><input type="checkbox" id="allJobs" /> Xem tất cả người dùng</label>
+        <div class="card jobs-card">
+          <div class="pane-title pane-title-actions">
+            <div>
+              <h2>Phiên vẽ</h2>
+              <p class="muted subtitle">Tiến độ và điều khiển các lệnh vẽ trên máy.</p>
+            </div>
+            <label class="check admin-only">
+              <input type="checkbox" id="allJobs" />
+              <span>Xem tất cả người dùng</span>
+            </label>
           </div>
-          <table class="table jobs-table">
-            <thead><tr><th>#</th><th>Bản vẽ</th><th>Máy</th><th>Người gửi</th><th>Trạng thái</th><th>Tiến độ</th><th>Tạo lúc</th><th></th></tr></thead>
-            <tbody id="jobRows"></tbody>
-          </table>
+          <div class="table-wrap">
+            <table class="table jobs-table">
+              <thead>
+                <tr>
+                  <th class="col-id">#</th>
+                  <th class="col-name">Bản vẽ</th>
+                  <th class="col-mach">Máy vẽ</th>
+                  <th class="col-user">Người gửi</th>
+                  <th class="col-status">Trạng thái</th>
+                  <th class="col-progress">Tiến độ</th>
+                  <th class="col-time">Tạo lúc</th>
+                  <th class="col-actions">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="jobRows"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
+      <!-- Tab 3: Machine Cards -->
       <div id="tab-machines" class="tab hidden">
+        <div class="machines-header">
+          <h2>Máy vẽ CNC</h2>
+          <p class="muted">Trạng thái kết nối MQTT, kích thước vùng làm việc và hàng đợi.</p>
+        </div>
         <div id="machineCards" class="machine-cards"></div>
       </div>
 
-      <!-- Admin Dashboard -->
+      <!-- Tab 4: Admin Dashboard -->
       <div id="tab-admin" class="tab hidden">
         <div class="grid-admin">
-          <div class="card">
-            <h2>Máy</h2>
-            <table class="table"><thead><tr><th>Mã</th><th>Tên</th><th>Trạng thái</th><th>Vùng vẽ</th><th>Token MQTT</th><th></th></tr></thead><tbody id="admMachines"></tbody></table>
+          <div class="card admin-machines-card">
+            <div class="pane-title"><h2>Quản lý máy vẽ</h2></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Mã máy</th>
+                    <th>Tên hiển thị</th>
+                    <th>Trạng thái</th>
+                    <th>Vùng vẽ (mm)</th>
+                    <th>Token MQTT</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="admMachines"></tbody>
+              </table>
+            </div>
             <form id="addMachineForm" class="row inline-form">
-              <input name="id" placeholder="mã máy (vd cnc-02)" required />
-              <input name="name" placeholder="tên hiển thị" />
-              <input name="workWidth" type="number" placeholder="rộng mm" value="200" />
-              <input name="workHeight" type="number" placeholder="cao mm" value="200" />
-              <button>Thêm máy</button>
+              <input name="id" placeholder="Mã máy (vd: cnc-02)" required />
+              <input name="name" placeholder="Tên hiển thị" />
+              <input name="workWidth" type="number" placeholder="Rộng mm" value="200" />
+              <input name="workHeight" type="number" placeholder="Cao mm" value="200" />
+              <button class="primary" type="submit">Thêm máy</button>
             </form>
           </div>
-          <div class="card">
-            <h2>Người dùng</h2>
-            <table class="table"><thead><tr><th>#</th><th>Tên</th><th>Vai trò</th><th>Trạng thái</th><th></th></tr></thead><tbody id="admUsers"></tbody></table>
+
+          <div class="card admin-users-card">
+            <div class="pane-title"><h2>Quản lý người dùng</h2></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Tên tài khoản</th>
+                    <th>Vai trò</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="admUsers"></tbody>
+              </table>
+            </div>
             <form id="addUserForm" class="row inline-form">
-              <input name="username" placeholder="tên đăng nhập" required />
-              <input name="password" type="password" placeholder="mật khẩu ≥ 6" required />
-              <select name="role"><option value="user">user</option><option value="admin">admin</option></select>
-              <button>Tạo tài khoản</button>
+              <input name="username" placeholder="Tên đăng nhập" required />
+              <input name="password" type="password" placeholder="Mật khẩu ≥ 6 ký tự" required />
+              <select name="role">
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+              <button class="primary" type="submit">Tạo tài khoản</button>
             </form>
           </div>
-          <div class="card">
-            <h2>Hàng đợi</h2>
-            <table class="table"><thead><tr><th>#</th><th>Máy</th><th>Bản vẽ</th><th>Người gửi</th><th>Trạng thái</th></tr></thead><tbody id="admQueue"></tbody></table>
+
+          <div class="card admin-queue-card">
+            <div class="pane-title"><h2>Hàng đợi toàn hệ thống</h2></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Máy</th>
+                    <th>Bản vẽ</th>
+                    <th>Người gửi</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody id="admQueue"></tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
     </main>
   </section>
 
+  <!-- Job Details Modal Dialog -->
   <dialog id="jobDetails" aria-labelledby="jobDetailsTitle">
-    <div class="row-between">
+    <div class="dialog-header">
       <h2 id="jobDetailsTitle">Chi tiết phiên vẽ</h2>
-      <form method="dialog"><button type="submit">Đóng</button></form>
+      <form method="dialog"><button type="submit" class="small ghost close-btn" aria-label="Đóng">Đóng</button></form>
     </div>
-    <div id="jobDetailsBody" role="status"></div>
+    <div id="jobDetailsBody" class="dialog-body" role="status"></div>
   </dialog>
 
-  <!-- Notification UI -->
-  <div id="toasts" class="toasts" role="status"></div>
+  <!-- Notification Toast UI -->
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
   <script type="module" src="app.js"></script>
 </body>
