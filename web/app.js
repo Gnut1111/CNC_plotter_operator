@@ -19,6 +19,89 @@ const app = {
   machines: [], selectedMachine: null, ws: null,
 };
 
+// ---------------- Login Editorial Showcase Carousel ----------------
+const SHOWCASE_SLIDES = [
+  {
+    label: "Pixel2Plot Studio",
+    quote: "Turn any image into crisp pen-drawn artwork on paper.",
+    pill: "Precision Plotting",
+  },
+  {
+    label: "Live Simulation",
+    quote: "Preview every stroke before the pen touches paper.",
+    pill: "Path Preview",
+  },
+  {
+    label: "Smart Calibration",
+    quote: "Balanced speed and fine detail in a single click.",
+    pill: "Auto Optimize",
+  },
+  {
+    label: "Remote Workspace",
+    quote: "Queue, pause, and monitor every plotter in one place.",
+    pill: "Fleet Control",
+  },
+];
+
+let showcaseIndex = 0;
+let showcaseTimer = null;
+
+function setShowcaseSlide(idx) {
+  const labelEl = $("#showcaseSlideLabel");
+  const quoteEl = $("#showcaseSlideQuote");
+  const pillEl = $("#showcaseSlidePill");
+  const stage = $("#showcaseCopyStage");
+  if (!labelEl || !quoteEl || !pillEl) return;
+
+  showcaseIndex = (idx + SHOWCASE_SLIDES.length) % SHOWCASE_SLIDES.length;
+  const slide = SHOWCASE_SLIDES[showcaseIndex];
+
+  if (stage) {
+    stage.classList.remove("slide-swap");
+    void stage.offsetWidth;
+    stage.classList.add("slide-swap");
+  }
+  labelEl.textContent = slide.label;
+  quoteEl.textContent = slide.quote;
+  pillEl.textContent = slide.pill;
+
+  $$("#showcaseBars .seg").forEach((seg, i) => {
+    seg.classList.remove("active", "done");
+    if (i < showcaseIndex) seg.classList.add("done");
+    if (i === showcaseIndex) {
+      void seg.offsetWidth;
+      seg.classList.add("active");
+    }
+  });
+}
+
+function startShowcaseCycle() {
+  stopShowcaseCycle();
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  showcaseTimer = setInterval(() => {
+    if (!$("#loginView")?.classList.contains("hidden")) {
+      setShowcaseSlide(showcaseIndex + 1);
+    }
+  }, 5000);
+}
+
+function stopShowcaseCycle() {
+  if (showcaseTimer) {
+    clearInterval(showcaseTimer);
+    showcaseTimer = null;
+  }
+}
+
+$("#showcaseBars")?.addEventListener("click", (e) => {
+  const seg = e.target.closest(".seg[data-slide]");
+  if (!seg) return;
+  setShowcaseSlide(Number(seg.dataset.slide));
+  startShowcaseCycle();
+});
+
+$("#showcaseCard")?.addEventListener("mouseenter", stopShowcaseCycle);
+$("#showcaseCard")?.addEventListener("mouseleave", startShowcaseCycle);
+
 // ---------------- API ----------------
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
@@ -78,18 +161,6 @@ $("#loginForm").addEventListener("submit", async (e) => {
   } catch (err) { $("#loginError").textContent = err.message; }
 });
 
-$$("[data-fill]").forEach((btn) => {
-  btn.onclick = () => {
-    const [u, p] = btn.dataset.fill.split(":");
-    const f = $("#loginForm");
-    if (f) {
-      f.username.value = u;
-      f.password.value = p;
-      f.username.focus();
-    }
-  };
-});
-
 function logout() {
   app.token = null; app.user = null;
   localStorage.removeItem("token"); localStorage.removeItem("user");
@@ -108,10 +179,13 @@ function logout() {
   resetWorkspace();
   $("#appView").classList.add("hidden");
   $("#loginView").classList.remove("hidden");
+  setShowcaseSlide(0);
+  startShowcaseCycle();
 }
 $("#logoutBtn").onclick = logout;
 
 function enterApp() {
+  stopShowcaseCycle();
   $("#loginView").classList.add("hidden");
   $("#appView").classList.remove("hidden");
   $("#whoami").textContent = `${app.user.username} (${app.user.role === "admin" ? "Quản trị" : "Người dùng"})`;
@@ -368,7 +442,7 @@ function updateStepGuide() {
   } else if (machine && !machine.online) {
     guideText.textContent = `Máy ${machine.name} đang mất kết nối. Lệnh gửi sẽ nằm trong hàng đợi.`;
   } else if (sending) {
-    guideText.textContent = "Đang truyền dữ liệu G-code sang máy...";
+    guideText.textContent = "Đang truyền bản vẽ sang máy...";
   } else {
     guideText.textContent = `Sẵn sàng gửi bản vẽ tới ${machine?.name || "máy"}.`;
   }
@@ -755,8 +829,8 @@ async function tuneDrawing(profile) {
               <span class="cand-match tabular-nums">${c.metrics.iou}%</span>
             </div>
             <div class="cand-info">
-              <small class="muted">${MODE_VI[c.params.mode]} · D:${c.params.detail}</small>
-              <small class="muted tabular-nums">~${c.metrics.minutes.toLocaleString("vi-VN")}p · ${c.metrics.paths} nét</small>
+              <small class="muted">${MODE_VI[c.params.mode]} · Mức ${c.params.detail}</small>
+              <small class="muted tabular-nums">~${c.metrics.minutes.toLocaleString("vi-VN")} phút · ${c.metrics.paths} nét</small>
             </div>
             <button type="button" class="small cand-apply-btn" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
           </div>`).join("")
@@ -1044,18 +1118,19 @@ function formatDate(value) {
 
 const EVENT_VI = {
   QUEUED: "Đã vào hàng đợi",
-  FILE_SENT: "Đã gửi dữ liệu G-code",
-  FILE_OK: "Máy nhận file thành công",
-  JOB_READY: "Sẵn sàng vẽ",
+  SENDING: "Đang truyền bản vẽ",
+  FILE_SENT: "Đã gửi dữ liệu bản vẽ",
+  FILE_OK: "Máy đã nhận đầy đủ dữ liệu",
+  JOB_READY: "Máy sẵn sàng vẽ",
   JOB_START: "Bắt đầu vẽ",
-  JOB_DONE: "Vẽ hoàn thành",
+  JOB_DONE: "Hoàn thành bản vẽ",
   JOB_FAILED: "Lỗi trong quá trình vẽ",
   PAUSED: "Đã tạm dừng",
   RESUMED: "Đã tiếp tục vẽ",
   CANCEL_REQUESTED: "Đã yêu cầu hủy, đang chờ máy xác nhận",
   CANCELLED_IN_QUEUE: "Đã rút phiên khỏi hàng đợi",
   CANCELLED: "Máy xác nhận đã dừng phiên",
-  JOB_INTERRUPTED: "Mất phiên đang thực hiện, cần kiểm tra giấy",
+  JOB_INTERRUPTED: "Phiên bị gián đoạn, cần kiểm tra giấy",
 };
 
 function formatTimeOnly(value) {
@@ -1111,7 +1186,6 @@ async function openJobDetails(id) {
                 <time class="timeline-time tabular-nums">${formatTimeOnly(event.created_at)}</time>
                 <div class="timeline-desc-wrap">
                   <span class="timeline-desc">${esc(EVENT_VI[event.event] || STATUS_VI[event.event] || event.event)}</span>
-                  ${event.event ? `<code class="timeline-code">${esc(event.event)}</code>` : ""}
                   ${event.detail ? `<span class="timeline-detail">${esc(event.detail)}</span>` : ""}
                 </div>
               </li>
@@ -1179,7 +1253,7 @@ async function loadAdmin() {
     <td class="tabular-nums">${u.id}</td><td><strong>${esc(u.username)}</strong></td><td><code>${u.role}</code></td><td>${u.locked ? badge("FAILED").replace("Lỗi", "Đã khóa") : badge("IDLE").replace("Sẵn sàng", "Hoạt động")}</td>
     <td><button class="small ${u.locked ? "ghost" : "danger"}" data-u="${u.id}" data-locked="${u.locked}">${u.locked ? "Mở khóa" : "Khóa"}</button></td></tr>`).join("");
   $("#admQueue").innerHTML = jobs.map((j) => `<tr><td class="tabular-nums">${j.id}</td><td><code>${esc(j.machine_id)}</code></td><td>${esc(j.drawing_name)}</td><td>${esc(j.username)}</td><td>${badge(j.status)}</td></tr>`).join("")
-    || `<tr><td colspan="5" class="muted" style="text-align:center;padding:20px;">Hàng đợi toàn hệ thống đang trống.</td></tr>`;
+    || `<tr><td colspan="5" class="muted" style="text-align:center;padding:20px;">Hàng đợi hệ thống đang trống.</td></tr>`;
 }
 
 $("#admMachines").addEventListener("click", async (e) => {

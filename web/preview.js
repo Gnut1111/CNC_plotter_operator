@@ -50,9 +50,11 @@ export function paintPreview(canvas, { area, size, image, preview, view, showTra
   const top = (height - area.h * k - 18) / 2;
   const X = (x) => left + x * k;
   const Y = (y) => top + (area.h - y) * k;
-  ctx.fillStyle = "#f8f8f5";
+
+  // Deterministic crisp paper bed (deterministic rendering for bit-for-bit toDataURL() stability)
+  ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(left, top, area.w * k, area.h * k);
-  ctx.strokeStyle = "#9da7ad";
+  ctx.strokeStyle = "#CBD5E1";
   ctx.lineWidth = 1;
   ctx.strokeRect(left, top, area.w * k, area.h * k);
 
@@ -69,21 +71,22 @@ export function paintPreview(canvas, { area, size, image, preview, view, showTra
   }
   if (view !== "image" && preview) {
     ctx.lineCap = "round";
-    if (showTravel) stroke(false, "#9a591f", 0.8, [3, 4]);
-    stroke(true, view === "compare" ? "#075aae" : "#17252c", Math.max(1.15, preview.params.penWidthMm * k), []);
+    if (showTravel) stroke(false, "#EA580C", 0.85, [3, 4]);
+    stroke(true, view === "compare" ? "#2563EB" : "#171717", Math.max(1.15, preview.params.penWidthMm * k), []);
   }
   if (head) {
     ctx.beginPath();
     ctx.arc(X(head.x), Y(head.y), 4.5, 0, 2 * Math.PI);
-    ctx.fillStyle = head.ink ? "#075aae" : "#fff";
+    ctx.fillStyle = head.ink ? "#171717" : "#FFFFFF";
     ctx.fill();
-    ctx.strokeStyle = "#075aae";
+    ctx.strokeStyle = head.ink ? "#171717" : "#EA580C";
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 
-  ctx.fillStyle = getComputedStyle(canvas).color;
-  ctx.font = "11px system-ui";
+  // Deterministic local system font (no remote font-swap race between renders)
+  ctx.fillStyle = "#737373";
+  ctx.font = "11px system-ui, -apple-system, sans-serif";
   ctx.textBaseline = "middle";
   ctx.textAlign = "right";
   ctx.fillText(String(area.h), left - 7, top + 1);

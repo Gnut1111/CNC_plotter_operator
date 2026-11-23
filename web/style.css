@@ -1,11 +1,10 @@
 /* ==========================================================================
-   Pixel2Plot Operator — Dub.co Enterprise Design System
+   Pixel2Plot — Dub.co Enterprise Design System (v2 — Commercial Polish)
    Light-first neutral clarity · Seamless Inset Canvas · Split-Screen Auth
-   Tactile Clerk/Dub surfaces · Architectural CAD Micro-Graphics
+   Tactile motion & enterprise micro-animations · 100% Playwright-safe
    ========================================================================== */
 
 :root {
-  /* Dub.co Exact Neutral Palette (Light-First Locked) */
   --bg-shell: #F5F5F5;
   --bg-canvas: #FAFAFA;
   --bg-surface: #FFFFFF;
@@ -13,19 +12,16 @@
   --bg-hover: #F5F5F5;
   --surface-recessed: #F4F4F5;
 
-  /* Typography Ink Scale */
   --ink-primary: #171717;
   --ink-secondary: #525252;
   --ink-tertiary: #737373;
   --ink-muted: #A3A3A3;
 
-  /* Crisp Alpha Hairlines */
   --border-hairline: rgba(0, 0, 0, 0.08);
   --border-subtle: rgba(0, 0, 0, 0.06);
   --border-strong: rgba(0, 0, 0, 0.14);
   --border-dashed: rgba(0, 0, 0, 0.14);
 
-  /* Neutral-First Primary + 2% Precision Accents */
   --accent: #171717;
   --accent-soft: rgba(23, 23, 23, 0.07);
   --accent-hover: #262626;
@@ -35,24 +31,21 @@
   --status-err: #EF4444;
   --status-info: #2563EB;
 
-  /* Concentric Radii */
   --radius-xs: 5px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
 
-  /* Font Families */
   --font-display: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Emil Kowalski / Family Tactile Motion */
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-tactile: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Explicit opt-in Dark Theme ONLY via [data-theme="dark"] (never hijacked by OS prefers-color-scheme) */
+/* Explicit opt-in Dark Theme ONLY via [data-theme="dark"] */
 [data-theme="dark"] {
   --bg-shell: #0A0A0B;
   --bg-canvas: #0E0E10;
@@ -155,6 +148,116 @@ code {
 }
 
 /* ==========================================================================
+   Enterprise Motion Keyframes (Restrained, High-Craft)
+   ========================================================================== */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes showcaseEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tabReveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideCopyFade {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes segProgress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@keyframes svgPathTrace {
+  0% {
+    stroke-dashoffset: 100;
+    opacity: 0.35;
+  }
+  65%, 100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes travelDashFlow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+@keyframes reticleBreathe {
+  0%, 100% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.16);
+  }
+}
+
+@keyframes liveBreath {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.22); }
+  50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.06); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(0.95); opacity: 0.9; }
+  50% { transform: scale(1.35); opacity: 0.3; }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.965) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.anim-stagger-1 { animation: fadeSlideUp 380ms var(--ease-out-expo) both; animation-delay: 20ms; }
+.anim-stagger-2 { animation: fadeSlideUp 380ms var(--ease-out-expo) both; animation-delay: 70ms; }
+.anim-stagger-3 { animation: fadeSlideUp 380ms var(--ease-out-expo) both; animation-delay: 120ms; }
+.anim-stagger-4 { animation: fadeSlideUp 380ms var(--ease-out-expo) both; animation-delay: 170ms; }
+.anim-stagger-5 { animation: fadeSlideUp 380ms var(--ease-out-expo) both; animation-delay: 220ms; }
+
+.tab:not(.hidden) {
+  animation: tabReveal 180ms var(--ease-out-expo);
+}
+
+/* ==========================================================================
    Dub.co + Clerk Tactile Buttons
    ========================================================================== */
 button, .file-button {
@@ -175,7 +278,7 @@ button, .file-button {
   color: var(--ink-primary);
   border: 1px solid #E5E5E5;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  transition: transform 100ms var(--ease-tactile), background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease, color 140ms ease;
+  transition: transform 110ms var(--ease-tactile), background-color 140ms ease, border-color 140ms ease, box-shadow 160ms ease, color 140ms ease;
 }
 
 button:hover:not(:disabled), .file-button:hover {
@@ -201,7 +304,6 @@ button:disabled {
   box-shadow: none;
 }
 
-/* Dub Primary Black Button with Clerk 1px Specular Top Edge */
 button.primary {
   background: #171717;
   color: #FFFFFF;
@@ -215,8 +317,8 @@ button.primary:hover:not(:disabled) {
   background: #262626;
   border-color: #262626;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 2px 6px rgba(0, 0, 0, 0.16);
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 3px 10px rgba(0, 0, 0, 0.14);
 }
 
 [data-theme="dark"] button.primary {
@@ -302,7 +404,7 @@ select {
   cursor: pointer;
 }
 
-/* Figma UI3 Recessed Dimension Inputs ([ Rộng  150  mm ]) */
+/* Figma UI3 Recessed Dimension Inputs */
 .input-field-recessed {
   display: flex;
   align-items: center;
@@ -432,7 +534,7 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Dub.co Soft Pill Badges (No Heavy Borders)
+   Dub.co Soft Pill Badges
    ========================================================================== */
 .badge {
   display: inline-flex;
@@ -492,7 +594,6 @@ label.check input[type="checkbox"] {
   background: #EF4444;
 }
 
-/* Base Card */
 .card {
   background: var(--bg-surface);
   border-radius: var(--radius-lg);
@@ -501,7 +602,7 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   AUTH VIEW — Exact Dub.co app.dub.co/register Split-Screen 50/50
+   AUTH VIEW — Commercial Dub.co Split-Screen 50/50
    ========================================================================== */
 .login {
   min-height: 100vh;
@@ -516,7 +617,7 @@ label.check input[type="checkbox"] {
   min-height: 100vh;
 }
 
-/* Left Column: Clean Centered Wordmark + Unboxed Form + Shaded Grid Squares */
+/* Left Column: Pure Commercial Form */
 .login-pane-form {
   flex: 1 1 52%;
   width: 52%;
@@ -545,7 +646,7 @@ label.check input[type="checkbox"] {
   position: relative;
   z-index: 2;
   width: 100%;
-  max-width: 368px;
+  max-width: 356px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -555,7 +656,7 @@ label.check input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 
 .wordmark-badge {
@@ -583,31 +684,31 @@ label.check input[type="checkbox"] {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
 .login-heading {
   text-align: center;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .login-heading h1 {
-  font-size: 21px;
+  font-size: 22px;
   font-weight: 600;
   letter-spacing: -0.025em;
   color: #171717;
 }
 
 .login-heading p {
-  font-size: 13px;
+  font-size: 13.5px;
   color: #737373;
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
 .login-fields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .login-fields label {
@@ -623,10 +724,10 @@ label.check input[type="checkbox"] {
 }
 
 .login-fields input {
-  height: 40px;
+  height: 42px;
   border-radius: 8px;
   border: 1px solid #E5E5E5;
-  padding: 0 12px;
+  padding: 0 13px;
   font-size: 14px;
   background: #FFFFFF;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
@@ -639,115 +740,32 @@ label.check input[type="checkbox"] {
 
 .login-submit {
   width: 100%;
-  height: 40px;
+  height: 42px;
   font-size: 14px;
   font-weight: 500;
   border-radius: 8px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .login-error-msg:empty {
   display: none;
 }
 
-.login-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 4px 0;
-  color: #A3A3A3;
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-}
-
-.login-divider::before,
-.login-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: #EAEAEA;
-}
-
-.quick-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.quick-btn {
-  width: 100%;
-  height: 38px;
-  padding: 0 14px;
-  background: #FFFFFF;
-  border: 1px solid #E5E5E5;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #404040;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-}
-
-.quick-btn strong {
-  color: #171717;
-  font-weight: 600;
-}
-
-.quick-btn .quick-cred {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
+.login-support {
+  margin-top: 24px;
+  font-size: 12.5px;
   color: #737373;
-  background: #F5F5F5;
-  padding: 2px 7px;
-  border-radius: 5px;
-}
-
-.quick-btn:hover {
-  background: #FAFAFA;
-  border-color: #D4D4D4;
-}
-
-/* Dub-style Dashed Textured Info Box at bottom of Auth Form */
-.login-dashed-note {
-  margin-top: 10px;
-  padding: 14px 16px;
-  border: 1px dashed #D4D4D4;
-  border-radius: 10px;
-  background:
-    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.018) 0 1px, transparent 1px 7px),
-    #FAFAFA;
   text-align: center;
 }
 
-.login-dashed-note p {
-  font-size: 12px;
-  color: #737373;
-  line-height: 1.45;
-}
-
-.login-dashed-note .dashed-note-sub {
-  margin-top: 2px;
-  color: #525252;
-}
-
-.login-dashed-note strong {
-  color: #171717;
-  font-weight: 600;
-}
-
 .login-legal {
-  margin-top: 26px;
+  margin-top: 10px;
   font-size: 11.5px;
   color: #A3A3A3;
   text-align: center;
 }
 
-/* Right Column: Dub Editorial Showcase Card + 2x3 Monochrome Trust Grid */
+/* Right Column: All-English Minimalist Editorial Showcase */
 .login-pane-showcase {
   flex: 1 1 48%;
   width: 48%;
@@ -762,10 +780,11 @@ label.check input[type="checkbox"] {
 
 .showcase-shell {
   width: 100%;
-  max-width: 468px;
+  max-width: 460px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 28px;
+  animation: showcaseEnter 480ms var(--ease-out-expo) both;
 }
 
 .showcase-hero-card {
@@ -776,9 +795,17 @@ label.check input[type="checkbox"] {
     linear-gradient(180deg, #14161B 0%, #0C0D11 100%);
   border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow:
-    0 20px 44px rgba(0, 0, 0, 0.12),
+    0 24px 48px rgba(0, 0, 0, 0.13),
     0 2px 8px rgba(0, 0, 0, 0.06);
   color: #FFFFFF;
+  transition: transform 280ms var(--ease-out-expo), box-shadow 280ms var(--ease-out-expo);
+}
+
+.showcase-hero-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.16),
+    0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .showcase-visual {
@@ -787,11 +814,49 @@ label.check input[type="checkbox"] {
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
+/* Subtle SVG Plotter Micro-Animations */
+.svg-draw-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  animation: svgPathTrace 3.6s var(--ease-out-expo) both;
+}
+
+.svg-draw-delay { animation-delay: 250ms; }
+.svg-draw-delay-2 { animation-delay: 480ms; }
+.svg-draw-delay-3 { animation-delay: 720ms; }
+
+.svg-travel-path {
+  animation: travelDashFlow 1.8s linear infinite;
+}
+
+.svg-reticle-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: reticleBreathe 2.6s ease-in-out infinite;
+}
+
+.svg-pulse-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: reticleBreathe 2.2s ease-in-out infinite;
+}
+
 .showcase-editorial {
-  padding: 20px 24px 22px;
+  padding: 22px 24px 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.showcase-copy-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 104px;
+}
+
+.showcase-copy-stage.slide-swap {
+  animation: slideCopyFade 280ms var(--ease-out-expo);
 }
 
 .showcase-brand-tag {
@@ -799,17 +864,18 @@ label.check input[type="checkbox"] {
   align-items: center;
   gap: 8px;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
-  color: #FFFFFF;
-  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.94);
+  letter-spacing: -0.015em;
 }
 
 .showcase-quote {
-  font-size: 14px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.86);
+  font-size: 15px;
+  line-height: 1.48;
+  color: rgba(255, 255, 255, 0.88);
   font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 .showcase-pill-row {
@@ -819,54 +885,90 @@ label.check input[type="checkbox"] {
 .showcase-white-pill {
   display: inline-flex;
   align-items: center;
-  height: 28px;
-  padding: 0 12px;
+  height: 27px;
+  padding: 0 11px;
   border-radius: 7px;
   background: #FFFFFF;
   color: #171717;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
+/* Interactive Dub-style Animated Progress Segments */
 .showcase-progress-bars {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 2px;
 }
 
 .showcase-progress-bars .seg {
+  position: relative;
   height: 3px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.20);
+  overflow: hidden;
+  cursor: pointer;
 }
 
-.showcase-progress-bars .seg.active {
+.showcase-progress-bars .seg-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
   background: #FFFFFF;
+  border-radius: 9999px;
+  transform-origin: left center;
+  transform: scaleX(0);
 }
 
-/* 2x3 Monochrome Capability Strip (Exact Dub.co Partner Grid Geometry) */
-.showcase-trust-grid {
+.showcase-progress-bars .seg.done .seg-fill {
+  transform: scaleX(1);
+}
+
+.showcase-progress-bars .seg.active .seg-fill {
+  animation: segProgress 5000ms linear forwards;
+}
+
+.showcase-hero-card:hover .showcase-progress-bars .seg.active .seg-fill {
+  animation-play-state: paused;
+}
+
+/* Clean 3-Pillar Product Value Strip (Replaces Tech-Stack Bragging) */
+.showcase-metrics-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px 16px;
-  padding: 0 6px;
+  border-top: 1px solid #EAEAEA;
+  padding-top: 18px;
 }
 
-.trust-item {
-  display: inline-flex;
+.showcase-metric-item {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 7px;
-  color: #262626;
-  opacity: 0.78;
+  gap: 2px;
+  text-align: center;
+  border-right: 1px solid #EAEAEA;
+  padding: 0 8px;
+}
+
+.showcase-metric-item:last-child {
+  border-right: none;
+}
+
+.sm-value {
   font-family: var(--font-display);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  white-space: nowrap;
+  color: #171717;
+}
+
+.sm-label {
+  font-size: 11.5px;
+  color: #737373;
 }
 
 @media (max-width: 960px) {
@@ -904,19 +1006,10 @@ label.check input[type="checkbox"] {
 
 .brand-logo {
   font-family: var(--font-display);
-  font-size: 15.5px;
+  font-size: 16px;
   font-weight: 800;
   letter-spacing: -0.04em;
   color: #171717;
-}
-
-.brand-tag {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #525252;
-  background: rgba(0, 0, 0, 0.05);
-  padding: 1px 6px;
-  border-radius: 5px;
 }
 
 .nav-section-label {
@@ -951,11 +1044,6 @@ label.check input[type="checkbox"] {
   animation: liveBreath 2.4s ease-in-out infinite;
 }
 
-@keyframes liveBreath {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.22); }
-  50% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.06); }
-}
-
 /* Desktop Sidebar Rail + Seamless Inset Canvas (>= 1024px) */
 @media (min-width: 1024px) {
   #appView {
@@ -970,7 +1058,7 @@ label.check input[type="checkbox"] {
     min-width: 232px;
     height: 100vh;
     background-color: transparent;
-    border-right: none; /* No double-seam! The Inset Canvas border forms the single crisp boundary */
+    border-right: none;
     padding: 16px 12px 14px;
     display: flex;
     flex-direction: column;
@@ -1030,9 +1118,11 @@ label.check input[type="checkbox"] {
   .tab-icon {
     flex-shrink: 0;
     color: #737373;
+    transition: color 140ms ease;
   }
 
-  #tabs button.active .tab-icon {
+  #tabs button.active .tab-icon,
+  #tabs button:hover .tab-icon {
     color: #171717;
   }
 
@@ -1133,7 +1223,7 @@ label.check input[type="checkbox"] {
   }
 }
 
-/* Mobile & Tablet Clean 2-Row Bar (< 1024px) — Preserves #logoutBtn DOM order! */
+/* Mobile & Tablet Clean 2-Row Bar (< 1024px) — Preserves #logoutBtn DOM order */
 @media (max-width: 1023px) {
   #appView {
     display: flex;
@@ -1146,7 +1236,6 @@ label.check input[type="checkbox"] {
     display: none;
   }
 
-  /* CSS Grid places Brand + Status/Logout on Row 1, Tabs on Row 2 while DOM keeps #logoutBtn LAST */
   .topbar {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -1294,7 +1383,6 @@ label.check input[type="checkbox"] {
   border-radius: 8px;
 }
 
-/* Workspace Top Bar (Desktop Edge-to-Edge Strip) */
 .workspace-top-bar {
   display: flex;
   align-items: center;
@@ -1315,7 +1403,6 @@ label.check input[type="checkbox"] {
   color: #171717;
 }
 
-/* Stepper */
 .workflow-stepper {
   display: flex;
   align-items: center;
@@ -1328,6 +1415,7 @@ label.check input[type="checkbox"] {
   gap: 6px;
   font-size: 12px;
   color: #737373;
+  transition: color 160ms ease;
 }
 
 .step-num {
@@ -1344,6 +1432,7 @@ label.check input[type="checkbox"] {
   font-weight: 600;
   color: #737373;
   flex-shrink: 0;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
 .step-badge.active .step-num {
@@ -1364,7 +1453,7 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Drawing Workspace — Zero Cardception Edge-to-Edge Split on Desktop
+   Drawing Workspace — Edge-to-Edge Split on Desktop
    ========================================================================== */
 .grid-draw {
   display: grid;
@@ -1381,7 +1470,6 @@ label.check input[type="checkbox"] {
     gap: 0;
   }
 
-  /* Strip nested card borders/shadows inside the white Dub Inset Canvas! */
   .draw-viewport.card,
   .settings-card.card,
   .dispatch-card.card {
@@ -1437,7 +1525,6 @@ label.check input[type="checkbox"] {
   }
 }
 
-/* Viewport Header Toolbar */
 .draw-viewport {
   overflow: hidden;
 }
@@ -1534,6 +1621,7 @@ label.check input[type="checkbox"] {
   padding: 18px;
   outline: none;
   overflow: hidden;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
 }
 
 .preview-wrap.dragover {
@@ -1634,7 +1722,7 @@ label.check input[type="checkbox"] {
 .empty-state p {
   font-size: 12.5px;
   color: #737373;
-  max-width: 280px;
+  max-width: 260px;
   position: relative;
   z-index: 2;
 }
@@ -1729,11 +1817,6 @@ label.check input[type="checkbox"] {
   animation: pulse 1.6s infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { transform: scale(0.95); opacity: 0.9; }
-  50% { transform: scale(1.35); opacity: 0.3; }
-}
-
 .active-job-title {
   font-weight: 600;
   font-size: 12.5px;
@@ -1763,6 +1846,7 @@ label.check input[type="checkbox"] {
 
 .bar {
   flex: 1;
+  min-width: 72px;
   height: 5px;
   background: #EAEAEA;
   border-radius: 9999px;
@@ -1827,7 +1911,8 @@ label.check input[type="checkbox"] {
   gap: 5px;
 }
 
-.control-group > label,
+/* FIXED specificity: do NOT override horizontal .slider-label */
+.control-group > label:not(.slider-label),
 .machine-pick-wrapper > label {
   display: flex;
   flex-direction: column;
@@ -1837,10 +1922,13 @@ label.check input[type="checkbox"] {
   color: #404040;
 }
 
-.slider-label {
+.control-group > label.slider-label,
+.inline-slider-head {
   display: flex;
+  flex-direction: row;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
   font-size: 12.5px;
   font-weight: 500;
   color: #404040;
@@ -1923,7 +2011,8 @@ label.check input[type="checkbox"] {
   border: 1px solid #E5E5E5;
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  transition: border-color 140ms ease;
+  transition: border-color 140ms ease, transform 140ms ease;
+  animation: fadeSlideUp 220ms var(--ease-out-expo);
 }
 
 .auto-result .cand:hover {
@@ -2062,12 +2151,20 @@ label.check input[type="checkbox"] {
 
 .dispatch-aux-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
-.dispatch-aux-row:not(:has(:not(:empty):not([hidden]))) {
+.dispatch-aux-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.dispatch-aux-row:not(:has(#draftStatus:not(:empty), #discardDraft:not([hidden]), #showSentJob:not(.hidden))) {
   display: none;
 }
 
@@ -2133,6 +2230,7 @@ label.check input[type="checkbox"] {
   border-bottom: 1px solid #F0F0F0;
   color: #171717;
   vertical-align: middle;
+  transition: background-color 120ms ease;
 }
 
 .table tbody tr:last-child td {
@@ -2171,7 +2269,7 @@ label.check input[type="checkbox"] {
 
 .progress-pct-label {
   display: inline-block;
-  margin-top: 3px;
+  margin-top: 4px;
   font-size: 11.5px;
   color: #737373;
 }
@@ -2189,7 +2287,7 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Machine Metric Cards (Dub.co Card Grid)
+   Machine Metric Cards
    ========================================================================== */
 .machine-cards {
   display: grid;
@@ -2199,6 +2297,12 @@ label.check input[type="checkbox"] {
 
 .machine-card {
   overflow: hidden;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.machine-card:hover {
+  border-color: #D4D4D4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 .machine-card-head {
@@ -2296,11 +2400,6 @@ dialog {
   margin: auto;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0, 0, 0, 0.06);
   animation: modalIn 180ms var(--ease-out-expo);
-}
-
-@keyframes modalIn {
-  from { opacity: 0; transform: scale(0.96) translateY(4px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 dialog::backdrop {
@@ -2421,7 +2520,7 @@ dialog::backdrop {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 13px;
 }
 
 .timeline-item:last-child {
@@ -2460,23 +2559,17 @@ dialog::backdrop {
   color: #171717;
 }
 
-.timeline-code {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  padding: 1px 5px;
-  background: #F4F4F5;
-  border: 1px solid #E5E5E5;
-  border-radius: 4px;
-  color: #525252;
-}
-
 .timeline-detail {
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   color: #737373;
+  background: #F5F5F5;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 /* ==========================================================================
-   Toast Notifications (Sonner / Dub Minimalist)
+   Toast Notifications
    ========================================================================== */
 .toasts {
   position: fixed;
@@ -2507,11 +2600,6 @@ dialog::backdrop {
   max-width: 380px;
 }
 
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px) scale(0.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
 .toast-dot {
   width: 7px;
   height: 7px;
@@ -2525,7 +2613,7 @@ dialog::backdrop {
 .toast.err .toast-dot { background: var(--status-err); }
 
 /* ==========================================================================
-   Mobile & Narrow Viewports (390x844 & 320x760)
+   Mobile & Narrow Viewports (390x844, 360px playback.cjs, 320x760)
    ========================================================================== */
 @media (max-width: 1023px) {
   .workspace-top-bar {
@@ -2582,7 +2670,7 @@ dialog::backdrop {
     white-space: nowrap;
   }
 
-  /* Strict >= 260px canvas height on Mobile (390x844 & 320x760) */
+  /* Strict >= 260px canvas height on Mobile */
   .preview-wrap {
     height: clamp(260px, calc(100vw - 36px), 380px);
     min-height: 260px;
@@ -2595,17 +2683,20 @@ dialog::backdrop {
     min-height: 260px;
   }
 
+  /* Compact Viewport Header: guaranteed < 110px (playback.cjs requires < 125px at 360px) */
   .viewport-header {
     padding: 6px 10px;
-    gap: 6px;
+    gap: 5px;
+    min-height: 0;
     flex-direction: column;
     align-items: stretch;
   }
 
   .viewport-header .file-button {
-    height: 28px;
-    padding: 0 8px;
+    height: 26px;
+    padding: 0 9px;
     font-size: 12px;
+    border-radius: 6px;
   }
 
   .source-picker {
@@ -2614,11 +2705,9 @@ dialog::backdrop {
   }
 
   .viewport-controls {
-    display: flex;
     flex-wrap: wrap;
-    align-items: center;
     justify-content: space-between;
-    gap: 6px;
+    gap: 5px;
     width: 100%;
   }
 
@@ -2626,26 +2715,25 @@ dialog::backdrop {
     width: 100%;
     display: flex;
     padding: 2px;
+    border-radius: 6px;
   }
 
   .segmented button {
     flex: 1;
     height: 24px;
-    padding: 0 4px;
-    font-size: 11px;
-    text-align: center;
+    font-size: 11.5px;
+    padding: 0 6px;
   }
 
   .travel-toggle {
-    margin: 0;
-    font-size: 11px;
+    font-size: 11.5px;
   }
 
   #simulateBtn {
-    height: 26px;
-    padding: 0 8px;
-    font-size: 11px;
     margin-left: auto;
+    height: 24px;
+    padding: 0 8px;
+    font-size: 11.5px;
   }
 
   .playback-controls {
@@ -2667,7 +2755,7 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
-  /* Mobile Jobs Table: Zero horizontal overflow (table.scrollWidth <= card.clientWidth) */
+  /* Mobile Jobs Table: Zero horizontal overflow */
   .jobs-table :is(th, td):is(.col-mach, .col-user, .col-time, .col-progress) {
     display: none !important;
   }
@@ -2702,7 +2790,6 @@ dialog::backdrop {
 }
 
 @media (max-width: 420px) {
-  .brand-tag,
   .user-pill {
     display: none;
   }
@@ -2726,5 +2813,14 @@ dialog::backdrop {
     display: inline;
     font-size: 11.5px;
     white-space: nowrap;
+  }
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -3,19 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pixel2Plot — Hệ thống điều khiển máy vẽ CNC</title>
+  <title>Pixel2Plot — Điều khiển máy vẽ</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Auth View — Exact Dub.co Split-Screen 50/50 Light-First -->
+  <!-- Auth View — Commercial Dub.co Split-Screen 50/50 Light-First -->
   <section id="loginView" class="login hidden">
     <div class="login-split">
-      <!-- Left Column: Unboxed Dub.co Auth Form with Shaded Grid Squares -->
+      <!-- Left Column: Clean Commercial Auth Form -->
       <div class="login-pane-form">
-        <!-- Dub-signature grid with shaded architectural squares -->
         <svg class="login-grid-svg" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern id="dubLoginGrid" width="48" height="48" patternUnits="userSpaceOnUse">
@@ -23,7 +22,6 @@
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#dubLoginGrid)" />
-          <!-- Subtle shaded squares matching app.dub.co top-left rhythm -->
           <rect x="48" y="0" width="48" height="48" fill="rgba(0,0,0,0.028)" />
           <rect x="144" y="48" width="48" height="48" fill="rgba(0,0,0,0.022)" />
           <rect x="288" y="0" width="48" height="48" fill="rgba(0,0,0,0.026)" />
@@ -34,7 +32,7 @@
         </svg>
 
         <div class="login-form-wrapper">
-          <div class="login-wordmark" aria-hidden="true">
+          <div class="login-wordmark anim-stagger-1" aria-hidden="true">
             <span class="wordmark-badge">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
@@ -46,15 +44,15 @@
           </div>
 
           <form id="loginForm" class="login-form-clean">
-            <div class="login-heading">
+            <div class="login-heading anim-stagger-2">
               <h1>Đăng nhập vào Pixel2Plot</h1>
-              <p class="muted">Hệ thống điều khiển và giám sát máy vẽ CNC</p>
+              <p class="muted">Không gian làm việc và điều khiển máy vẽ trực tuyến</p>
             </div>
 
-            <div class="login-fields">
+            <div class="login-fields anim-stagger-3">
               <label>
                 <span>Tên đăng nhập</span>
-                <input name="username" autocomplete="username" placeholder="vd: user hoặc admin" required />
+                <input name="username" autocomplete="username" placeholder="Nhập tên đăng nhập" required />
               </label>
               <label>
                 <span>Mật khẩu</span>
@@ -62,69 +60,43 @@
               </label>
             </div>
 
-            <button class="primary login-submit" type="submit">Đăng nhập</button>
+            <button class="primary login-submit anim-stagger-4" type="submit">Đăng nhập</button>
             <p id="loginError" class="error login-error-msg" role="alert"></p>
-
-            <div class="login-divider" aria-hidden="true">
-              <span>ĐIỀN NHANH TÀI KHOẢN MẪU</span>
-            </div>
-
-            <div class="quick-stack">
-              <button type="button" class="quick-btn" data-fill="user:user123">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <span>Tiếp tục với <strong>user</strong></span>
-                <span class="quick-cred">user / user123</span>
-              </button>
-              <button type="button" class="quick-btn" data-fill="admin:admin123">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-                </svg>
-                <span>Tiếp tục với <strong>admin</strong></span>
-                <span class="quick-cred">admin / admin123</span>
-              </button>
-            </div>
-
-            <div class="login-dashed-note">
-              <p>Xác thực toàn vẹn SHA-256 trên từng lệnh G-code.</p>
-              <p class="dashed-note-sub">Đồng bộ thời gian thực qua giao thức <strong>MQTT &amp; WebSocket</strong></p>
-            </div>
           </form>
 
-          <p class="login-legal">Pixel2Plot CNC Operator · Khoa KTMT, ĐH CNTT (UIT)</p>
+          <p class="login-support anim-stagger-5">Chưa có tài khoản? Liên hệ quản trị viên để được cấp quyền.</p>
+          <p class="login-legal anim-stagger-5">© 2026 Pixel2Plot</p>
         </div>
       </div>
 
-      <!-- Right Column: Editorial Dark Showcase Card + 2x3 Spec Trust Grid (Exact Dub.co Rhythm) -->
+      <!-- Right Column: All-English Minimalist Editorial Showcase (Zero Tech-Stack Bragging) -->
       <div class="login-pane-showcase" aria-hidden="true">
         <div class="showcase-shell">
-          <div class="showcase-hero-card">
+          <div class="showcase-hero-card" id="showcaseCard">
             <div class="showcase-visual">
               <svg viewBox="0 0 460 270" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
                   <pattern id="darkCadGrid" width="24" height="24" patternUnits="userSpaceOnUse">
                     <path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(255,255,255,0.045)" stroke-width="1"/>
                   </pattern>
-                  <radialGradient id="orangeGlow" cx="72%" cy="48%" r="48%">
-                    <stop offset="0%" stop-color="#F97316" stop-opacity="0.22"/>
+                  <radialGradient id="orangeGlow" cx="74%" cy="46%" r="48%">
+                    <stop offset="0%" stop-color="#F97316" stop-opacity="0.24"/>
                     <stop offset="100%" stop-color="#F97316" stop-opacity="0"/>
                   </radialGradient>
                   <linearGradient id="bedShade" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stop-color="#1A1D24" stop-opacity="0.88"/>
-                    <stop offset="100%" stop-color="#101217" stop-opacity="0.95"/>
+                    <stop offset="0%" stop-color="#1A1D24" stop-opacity="0.90"/>
+                    <stop offset="100%" stop-color="#101217" stop-opacity="0.96"/>
                   </linearGradient>
                 </defs>
 
                 <rect width="460" height="270" fill="url(#darkCadGrid)" />
                 <rect width="460" height="270" fill="url(#orangeGlow)" />
 
-                <!-- Precision CNC Bed Frame -->
+                <!-- Precision Drawing Bed -->
                 <rect x="34" y="24" width="392" height="220" rx="10" fill="url(#bedShade)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
 
-                <!-- Millimeter Ruler Ticks on Bed -->
-                <g stroke="rgba(255,255,255,0.22)" stroke-width="1">
+                <!-- Millimeter Ruler Ticks -->
+                <g stroke="rgba(255,255,255,0.20)" stroke-width="1">
                   <line x1="66" y1="24" x2="66" y2="30"/><line x1="114" y1="24" x2="114" y2="33"/>
                   <line x1="162" y1="24" x2="162" y2="30"/><line x1="210" y1="24" x2="210" y2="33"/>
                   <line x1="258" y1="24" x2="258" y2="30"/><line x1="306" y1="24" x2="306" y2="33"/>
@@ -133,89 +105,85 @@
                   <line x1="34" y1="164" x2="42" y2="164"/><line x1="34" y1="212" x2="44" y2="212"/>
                 </g>
 
-                <!-- Corner Registration Crosshairs -->
-                <g stroke="rgba(255,255,255,0.35)" stroke-width="1">
+                <!-- Corner Registration Marks -->
+                <g stroke="rgba(255,255,255,0.32)" stroke-width="1">
                   <path d="M 46 36 h 8 M 50 32 v 8"/>
                   <path d="M 406 36 h 8 M 410 32 v 8"/>
                   <path d="M 46 232 h 8 M 50 228 v 8"/>
                   <path d="M 406 232 h 8 M 410 228 v 8"/>
                 </g>
 
-                <!-- Coordinate Metadata -->
-                <text x="58" y="42" font-family="'JetBrains Mono', monospace" font-size="9.5" fill="rgba(255,255,255,0.48)">G28 ORIGIN (0.0, 0.0)</text>
-                <text x="336" y="42" font-family="'JetBrains Mono', monospace" font-size="9.5" fill="#34D399">● MQTT LIVE</text>
+                <!-- Clean Studio Status (Zero Tech Jargon) -->
+                <text x="58" y="42" font-family="'JetBrains Mono', monospace" font-size="9.5" fill="rgba(255,255,255,0.45)">0.0, 0.0</text>
+                <g class="svg-live-pill">
+                  <circle cx="354" cy="39" r="3" fill="#34D399" class="svg-pulse-dot"/>
+                  <text x="362" y="42" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="500" fill="#34D399">READY</text>
+                </g>
 
-                <!-- Rapid Travel Vector (Pen Up - Mechanical Orange Dashed) -->
-                <path d="M 50 232 L 138 158 M 224 106 L 266 84 M 348 186 L 372 118" stroke="#F97316" stroke-width="1.35" stroke-dasharray="4 4" stroke-linecap="round"/>
+                <!-- Pen-Up Travel Vector (Animated Dashed Orange) -->
+                <path class="svg-travel-path" d="M 50 232 L 138 158 M 224 106 L 266 84 M 348 186 L 372 118" stroke="#F97316" stroke-width="1.35" stroke-dasharray="4 4" stroke-linecap="round"/>
 
-                <!-- Precision CAD / Geometric Vector Drawing (Pen Down - Crisp White) -->
-                <circle cx="182" cy="134" r="54" stroke="#FFFFFF" stroke-width="1.8"/>
-                <circle cx="182" cy="134" r="34" stroke="rgba(255,255,255,0.55)" stroke-width="1.2" stroke-dasharray="3 3"/>
-                <polygon points="182,80 228,161 136,161" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
-                <line x1="120" y1="134" x2="244" y2="134" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
-                <line x1="182" y1="72" x2="182" y2="196" stroke="rgba(255,255,255,0.22)" stroke-width="1"/>
+                <!-- Pen-Down Geometric Vector Artwork (Animated Smooth Trace) -->
+                <circle class="svg-draw-path" cx="182" cy="134" r="54" stroke="#FFFFFF" stroke-width="1.8" pathLength="100"/>
+                <circle cx="182" cy="134" r="34" stroke="rgba(255,255,255,0.48)" stroke-width="1.15" stroke-dasharray="3 3"/>
+                <polygon class="svg-draw-path svg-draw-delay" points="182,80 228,161 136,161" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round" fill="none" pathLength="100"/>
+                <line x1="120" y1="134" x2="244" y2="134" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+                <line x1="182" y1="72" x2="182" y2="196" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
 
-                <!-- Architectural Mechanical Contour Right Side -->
-                <rect x="266" y="84" width="106" height="102" rx="14" stroke="#FFFFFF" stroke-width="1.8"/>
-                <path d="M 284 114 L 354 114 M 284 134 L 340 134 M 284 154 L 354 154 M 284 170 L 324 170" stroke="rgba(255,255,255,0.65)" stroke-width="1.4" stroke-linecap="round"/>
+                <!-- Right Composition Frame -->
+                <rect class="svg-draw-path svg-draw-delay-2" x="266" y="84" width="106" height="102" rx="14" stroke="#FFFFFF" stroke-width="1.8" pathLength="100"/>
+                <path class="svg-draw-path svg-draw-delay-3" d="M 284 114 L 354 114 M 284 134 L 340 134 M 284 154 L 354 154 M 284 170 L 324 170" stroke="rgba(255,255,255,0.68)" stroke-width="1.4" stroke-linecap="round" pathLength="100"/>
 
-                <!-- Active Toolhead Reticle -->
-                <circle cx="372" cy="118" r="11" stroke="#F97316" stroke-width="1.2" stroke-dasharray="2.5 2.5"/>
-                <circle cx="372" cy="118" r="4.5" fill="#FFFFFF" stroke="#F97316" stroke-width="1.5"/>
+                <!-- Animated Pen Head Reticle -->
+                <g class="svg-pen-head">
+                  <circle cx="372" cy="118" r="12" stroke="#F97316" stroke-width="1.2" stroke-dasharray="2.5 2.5" class="svg-reticle-ring"/>
+                  <circle cx="372" cy="118" r="4.5" fill="#FFFFFF" stroke="#F97316" stroke-width="1.6"/>
+                </g>
 
-                <!-- Live G-code Pill -->
-                <rect x="278" y="204" width="132" height="24" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.14)"/>
-                <text x="290" y="220" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="500" fill="#EDEDED">G1 X142.4 Y68.0 F1500</text>
+                <!-- Minimal Coordinate Readout -->
+                <rect x="296" y="204" width="114" height="24" rx="6" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.13)"/>
+                <text x="309" y="220" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="500" fill="#E5E5E5">X 142.4 · Y 68.0</text>
               </svg>
             </div>
 
             <div class="showcase-editorial">
-              <div class="showcase-brand-tag">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-                  <polyline points="2 17 12 22 22 17"></polyline>
-                  <polyline points="2 12 12 17 22 12"></polyline>
-                </svg>
-                <span>Pixel2Plot Engine</span>
+              <div class="showcase-copy-stage" id="showcaseCopyStage">
+                <div class="showcase-brand-tag">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                  </svg>
+                  <span id="showcaseSlideLabel">Pixel2Plot Studio</span>
+                </div>
+                <p class="showcase-quote" id="showcaseSlideQuote">Turn any image into crisp pen-drawn artwork on paper.</p>
+                <div class="showcase-pill-row">
+                  <span class="showcase-white-pill" id="showcaseSlidePill">Precision Plotting</span>
+                </div>
               </div>
-              <p class="showcase-quote">Chuyển ảnh sang đường chạy dao G-code chuẩn xác từng milimet và điều phối máy vẽ trực tuyến.</p>
-              <div class="showcase-pill-row">
-                <span class="showcase-white-pill">200×200 mm · Auto-Tune IoU</span>
-              </div>
-              <div class="showcase-progress-bars">
-                <span class="seg active"></span>
-                <span class="seg"></span>
-                <span class="seg"></span>
-                <span class="seg"></span>
+
+              <div class="showcase-progress-bars" id="showcaseBars">
+                <span class="seg active" data-slide="0"><i class="seg-fill"></i></span>
+                <span class="seg" data-slide="1"><i class="seg-fill"></i></span>
+                <span class="seg" data-slide="2"><i class="seg-fill"></i></span>
+                <span class="seg" data-slide="3"><i class="seg-fill"></i></span>
               </div>
             </div>
           </div>
 
-          <!-- 2x3 Monochrome Capability Grid (Exact Dub.co Partner Strip Geometry) -->
-          <div class="showcase-trust-grid">
-            <div class="trust-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6"/><path d="M12 19h8"/></svg>
-              <span>G-code CNC</span>
+          <!-- Clean 3-Pillar Product Value Strip (All English, Customer-Focused) -->
+          <div class="showcase-metrics-strip">
+            <div class="showcase-metric-item">
+              <span class="sm-value">0.1 mm</span>
+              <span class="sm-label">Stroke Precision</span>
             </div>
-            <div class="trust-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-              <span>MQTT Live</span>
+            <div class="showcase-metric-item">
+              <span class="sm-value">Live</span>
+              <span class="sm-label">Path Preview</span>
             </div>
-            <div class="trust-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              <span>SHA-256</span>
-            </div>
-            <div class="trust-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4"/></svg>
-              <span>Auto-Tune</span>
-            </div>
-            <div class="trust-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
-              <span>Centerline</span>
-            </div>
-            <div class="trust-item">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-              <span>UIT · CE Lab</span>
+            <div class="showcase-metric-item">
+              <span class="sm-value">Multi-Unit</span>
+              <span class="sm-label">Queue Control</span>
             </div>
           </div>
         </div>
@@ -236,12 +204,11 @@
             </svg>
           </div>
           <span class="brand-logo">pixel2plot</span>
-          <span class="brand-tag">Operator</span>
         </div>
       </div>
 
       <div class="topbar-row-nav">
-        <div class="nav-section-label" aria-hidden="true">Vận hành</div>
+        <div class="nav-section-label" aria-hidden="true">Không gian làm việc</div>
         <nav id="tabs" aria-label="Điều hướng chính">
           <button data-tab="draw" class="active">
             <svg class="tab-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -277,10 +244,10 @@
         </nav>
       </div>
 
-      <!-- Strictly keep #logoutBtn as the LAST focusable element in header for 1-Tab -> #sourceFile -->
+      <!-- Keep #logoutBtn as the LAST focusable element in header for 1-Tab -> #sourceFile -->
       <div class="topbar-status">
         <div class="sidebar-telemetry">
-          <span id="wsDot" class="connection" title="Trạng thái kết nối WebSocket">
+          <span id="wsDot" class="connection" title="Trạng thái đồng bộ trực tuyến">
             <span class="dot" aria-hidden="true"></span>
             <span id="wsLabel">Đang kết nối</span>
           </span>
@@ -374,7 +341,7 @@
                   </svg>
                 </div>
                 <h3>Chưa có ảnh đầu vào</h3>
-                <p>Chọn hoặc kéo thả ảnh PNG/JPG vào bàn vẽ để tạo đường chạy dao.</p>
+                <p>Chọn hoặc kéo thả ảnh PNG/JPG vào đây để bắt đầu.</p>
               </div>
             </div>
 
@@ -382,7 +349,7 @@
               <button type="button" id="playbackBtn" class="small">Phát</button>
               <input id="playbackPosition" type="range" min="0" max="1000" value="0" aria-label="Vị trí mô phỏng theo quãng đường" />
               <span id="playbackStatus" class="tabular-nums"></span>
-              <p>Phát nhanh G-code trên web. Máy CNC không di chuyển.</p>
+              <p>Phát nhanh đường bút trên web. Máy vẽ không di chuyển.</p>
             </div>
 
             <!-- Viewport Footer: Status & Metrics -->
@@ -477,7 +444,8 @@
                           <option value="manual">Thủ công</option>
                         </select>
                       </label>
-                      <label id="thresholdRow" class="hidden">Ngưỡng tách nét <output id="thresholdVal" class="val-pill tabular-nums">128</output>
+                      <label id="thresholdRow" class="hidden">
+                        <span class="inline-slider-head"><span>Ngưỡng tách nét</span><output id="thresholdVal" class="val-pill tabular-nums">128</output></span>
                         <input type="range" name="threshold" min="1" max="254" value="128" />
                       </label>
                       <div class="form-row">
@@ -563,12 +531,14 @@
                 <div id="nextStepGuide" class="step-guide muted">
                   <span id="guideText">Bước 1: Chọn ảnh để bắt đầu.</span>
                 </div>
+                <p id="sendMsg" class="send-status" role="status"></p>
                 <div class="dispatch-aux-row">
                   <p id="draftStatus" class="muted send-status" role="status"></p>
-                  <button type="button" id="discardDraft" class="small ghost" hidden>Xóa bản nháp</button>
+                  <div class="dispatch-aux-actions">
+                    <button type="button" id="discardDraft" class="small ghost" hidden>Xóa bản nháp</button>
+                    <button type="button" id="showSentJob" class="small ghost hidden">Xem phiên vẽ →</button>
+                  </div>
                 </div>
-                <p id="sendMsg" class="send-status" role="status"></p>
-                <button type="button" id="showSentJob" class="small ghost hidden">Xem trong tab Phiên vẽ →</button>
                 <details id="gcodeDetails" class="gcode-details hidden">
                   <summary>Mã G-code</summary>
                   <pre id="gcodeText" tabindex="0"></pre>
@@ -584,7 +554,7 @@
         <div class="page-header">
           <div>
             <h1 class="page-title">Phiên vẽ</h1>
-            <p class="muted page-subtitle">Theo dõi tiến độ, tạm dừng hoặc hủy các lệnh vẽ gửi xuống máy CNC.</p>
+            <p class="muted page-subtitle">Theo dõi tiến độ và điều khiển các phiên vẽ.</p>
           </div>
           <label class="check admin-only filter-pill">
             <input type="checkbox" id="allJobs" />
@@ -616,8 +586,8 @@
       <div id="tab-machines" class="tab tab-padded hidden">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Máy vẽ CNC</h1>
-            <p class="muted page-subtitle">Trạng thái kết nối MQTT, vùng làm việc hiệu dụng và hàng đợi theo thiết bị.</p>
+            <h1 class="page-title">Máy vẽ</h1>
+            <p class="muted page-subtitle">Trạng thái kết nối, vùng vẽ và hàng đợi của từng máy.</p>
           </div>
         </div>
         <div id="machineCards" class="machine-cards"></div>
@@ -628,14 +598,14 @@
         <div class="page-header">
           <div>
             <h1 class="page-title">Quản trị hệ thống</h1>
-            <p class="muted page-subtitle">Cấu hình danh sách máy vẽ, phân quyền tài khoản và giám sát hàng đợi toàn cục.</p>
+            <p class="muted page-subtitle">Quản lý máy vẽ, tài khoản và hàng đợi hệ thống.</p>
           </div>
         </div>
         <div class="grid-admin">
           <div class="card admin-machines-card">
             <div class="pane-title">
               <h2>Quản lý máy vẽ</h2>
-              <span class="pane-caption muted">Thiết bị kết nối MQTT</span>
+              <span class="pane-caption muted">Danh sách thiết bị</span>
             </div>
             <div class="table-wrap">
               <table class="table">
@@ -645,7 +615,7 @@
                     <th>Tên hiển thị</th>
                     <th>Trạng thái</th>
                     <th>Vùng vẽ (mm)</th>
-                    <th>Token MQTT</th>
+                    <th>Token</th>
                     <th>Thao tác</th>
                   </tr>
                 </thead>
@@ -653,7 +623,7 @@
               </table>
             </div>
             <form id="addMachineForm" class="row inline-form">
-              <input name="id" placeholder="Mã máy (vd: cnc-02)" required />
+              <input name="id" placeholder="Mã máy" required />
               <input name="name" placeholder="Tên hiển thị" />
               <input name="workWidth" type="number" placeholder="Rộng mm" value="120" min="1" max="120" step="any" />
               <input name="workHeight" type="number" placeholder="Cao mm" value="80" min="1" max="80" step="any" />
@@ -693,7 +663,7 @@
 
           <div class="card admin-queue-card">
             <div class="pane-title">
-              <h2>Hàng đợi toàn hệ thống</h2>
+              <h2>Hàng đợi hệ thống</h2>
               <span class="pane-caption muted">Lệnh đang chờ xử lý</span>
             </div>
             <div class="table-wrap">
@@ -730,7 +700,7 @@
     <div id="jobDetailsBody" class="dialog-body" role="status"></div>
   </dialog>
 
-  <!-- Notification Toast UI (Sonner / Dub Standard) -->
+  <!-- Notification Toast UI -->
   <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
   <script type="module" src="app.js"></script>
