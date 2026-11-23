@@ -3,6 +3,7 @@
 // Bổ sung: ngưỡng tự động (Otsu / thích nghi), tự đảo màu, xóa đốm nhiễu, tô gạch (fill),
 // chấm điểm độ giống ảnh gốc (Chamfer, IoU) và tự dò bộ tham số tốt nhất (autoTune).
 const sharp = require("sharp");
+const { traceSkeleton } = require("./trace-paths");
 
 const DEFAULTS = {
   widthMm: 150, // kích thước bản vẽ mong muốn (giữ tỉ lệ ảnh)
@@ -52,6 +53,7 @@ const maxSizeFor = (detail) => 150 + detail * 60; // 210..750 px
 
 async function loadGray(buffer, maxSize) {
   const { data, info } = await sharp(buffer)
+    .rotate()
     .flatten({ background: "#ffffff" })
     .resize(maxSize, maxSize, { fit: "inside", withoutEnlargement: true })
     .greyscale()
@@ -191,35 +193,54 @@ const minAreaFor = (w, h) => Math.max(4, Math.round(w * h * 0.00003));
 // ---------------- Trích đường nét ----------------
 
 // Làm mảnh Zhang–Suen → nét 1 pixel (đường tâm)
-function thin({ binary, width, height }) {
-  const px = new Uint8Array(binary);
-  const at = (x, y) => px[y * width + x];
-  let changed = true;
-  let iter = 0;
-  while (changed && iter++ < 80) {
+const deletionRules = Uint8Array.from({ length: 256 }, (_, mask) => {
+  const neighbors = Array.from({ length: 8 }, (_, i) => (mask >> i) & 1);
+  const count = neighbors.reduce((sum, value) => sum + value, 0);
+  if (count < 2 || count > 6) return 0;
+  const transitions = neighbors.filter((value, i) => !value && neighbors[(i + 1) % 8]).length;
+  if (transitions !== 1) return 0;
+
+  const [north, , east, , south, , west] = neighbors;
+  const first = !(north && east && south) && !(east && south && west);
+  const second = !(north && east && west) && !(north && south && west);
+  return Number(first) | (Number(second) << 1);
+});
+
+function thin(image) {
+  // Pad the image so thinning can read all eight neighbors at the frame.
+  const stride = image.width + 2;
+  const pixels = new Uint8Array(stride * (image.height + 2));
+  for (let row = 0; row < image.height; row += 1) {
+    const rasterStart = row * image.width;
+    pixels.set(image.binary.subarray(rasterStart, rasterStart + image.width), (row + 1) * stride + 1);
+  }
+
+  let changed;
+  do {
     changed = false;
-    for (const pass of [0, 1]) {
-      const del = [];
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
-          if (!at(x, y)) continue;
-          const n = [at(x, y - 1), at(x + 1, y - 1), at(x + 1, y), at(x + 1, y + 1),
-            at(x, y + 1), at(x - 1, y + 1), at(x - 1, y), at(x - 1, y - 1)];
-          const [p2, , p4, , p6, , p8] = n;
-          const count = n.reduce((s, v) => s + v, 0);
-          if (count < 2 || count > 6) continue;
-          let trans = 0;
-          for (let i = 0; i < 8; i++) if (!n[i] && n[(i + 1) % 8]) trans++;
-          if (trans !== 1) continue;
-          const ok = pass === 0 ? !(p2 && p4 && p6) && !(p4 && p6 && p8) : !(p2 && p4 && p8) && !(p2 && p6 && p8);
-          if (ok) del.push(y * width + x);
+    for (const pass of [1, 2]) {
+      const remove = [];
+      for (let row = 1; row <= image.height; row += 1) {
+        const end = row * stride + image.width;
+        for (let i = row * stride + 1; i <= end; i += 1) {
+          if (!pixels[i]) continue;
+          const mask = pixels[i - stride] | (pixels[i - stride + 1] << 1) |
+            (pixels[i + 1] << 2) | (pixels[i + stride + 1] << 3) |
+            (pixels[i + stride] << 4) | (pixels[i + stride - 1] << 5) |
+            (pixels[i - 1] << 6) | (pixels[i - stride - 1] << 7);
+          if (deletionRules[mask] & pass) remove.push(i);
         }
       }
-      for (const i of del) px[i] = 0;
-      if (del.length) changed = true;
+      for (const i of remove) pixels[i] = 0;
+      changed ||= remove.length > 0;
     }
+  } while (changed);
+  const binary = new Uint8Array(image.binary.length);
+  for (let row = 0; row < image.height; row += 1) {
+    const start = (row + 1) * stride + 1;
+    binary.set(pixels.subarray(start, start + image.width), row * image.width);
   }
-  return { binary: px, width, height };
+  return { ...image, binary };
 }
 
 function edges({ binary, width, height }) {
@@ -374,12 +395,10 @@ function order(paths) {
 
 /** Trích đường nét (tọa độ pixel) theo kiểu nét */
 function pixelPaths(bin, mode, spacingPx) {
-  if (mode === "centerline") return trace(thin(bin));
-  const outline = trace(edges(bin));
+  if (mode === "centerline") return traceSkeleton(thin(bin));
+  const outline = trace(edges(bin)).map((points) => ({ points }));
   if (mode !== "fill") return outline;
-  const h = hatch(bin, spacingPx);
-  h.forEach((pts) => (pts.isHatch = true)); // đường tô gạch vốn thẳng — không làm mượt
-  return outline.concat(h);
+  return outline.concat(hatch(bin, spacingPx).map((points) => ({ points, isHatch: true })));
 }
 
 /** Ánh xạ pixel → mm: giữ tỉ lệ, căn giữa vùng vẽ, trục Y hướng lên */
@@ -391,12 +410,15 @@ function transformFor(w, h, p, workArea) {
 function toMachinePaths(pxPaths, tf, p, workArea) {
   const tol = (11 - p.detail) * 0.05; // mm
   let paths = pxPaths
-    .map((pts) => {
-      const mm = pts.map((q) => ({ x: tf.offX + q.x * tf.scale, y: tf.offY + (tf.h - q.y) * tf.scale }));
-      // Làm mượt bậc thang pixel TRƯỚC rồi mới giản lược — làm ngược lại sẽ vạt mất góc vuông (TC17)
-      return pts.isHatch ? mm : simplify(chaikin(mm, p.smoothing), tol);
+    .map(({ points, closed, connectsJunctions, isHatch }) => {
+      const mm = points.map((q) => ({ x: tf.offX + q.x * tf.scale, y: tf.offY + (tf.h - q.y) * tf.scale }));
+      // Chaikin pins endpoints, including the start of a loop attached to a junction.
+      const smoothed = isHatch ? mm : chaikin(mm, p.smoothing);
+      const reduced = isHatch ? smoothed : simplify(smoothed, tol);
+      return { points: closed && reduced.length < 4 ? smoothed : reduced, connectsJunctions };
     })
-    .filter((pts) => pts.length > 1 && length(pts) >= 0.5);
+    .filter(({ points, connectsJunctions }) => connectsJunctions || length(points) >= 0.5)
+    .map(({ points }) => points);
   paths = order(paths);
   // Kẹp vào vùng vẽ (TC18: không trục nào vượt giới hạn)
   for (const pts of paths) for (const q of pts) {
@@ -460,13 +482,13 @@ function distanceTransform(mask, w, h) {
 }
 
 // Vẽ các nét (mm) ra ảnh nhị phân cùng lưới với ảnh tham chiếu, có tính bề rộng bút
-function rasterize(paths, ref, tf, penWidthMm) {
+function rasterize(paths, ref, tf, penWidthMm, pixelOffset) {
   const { width: W, height: H } = ref;
   const mmPerPx = (tf.w * tf.scale) / W;
   const top = tf.offY + tf.h * tf.scale;
   const r = Math.max(0.5, penWidthMm / 2 / mmPerPx);
   const out = new Uint8Array(W * H);
-  const P = (q) => ({ x: (q.x - tf.offX) / mmPerPx, y: (top - q.y) / mmPerPx });
+  const P = (q) => ({ x: (q.x - tf.offX) / mmPerPx - pixelOffset, y: (top - q.y) / mmPerPx - pixelOffset });
   for (const path of paths) {
     for (let i = 1; i < path.length; i++) {
       const a = P(path[i - 1]), b = P(path[i]);
@@ -488,7 +510,7 @@ function rasterize(paths, ref, tf, penWidthMm) {
  * - iou: phần trăm trùng khớp diện tích nét.
  */
 function evaluate(paths, ref, tf, p) {
-  const { out: drawn, mmPerPx } = rasterize(paths, ref, tf, p.penWidthMm);
+  const { out: drawn, mmPerPx } = rasterize(paths, ref, tf, p.penWidthMm, p.mode === "centerline" ? 0.5 : 0);
   const { binary: ink, width: W, height: H } = ref;
   let nInk = 0, nDrawn = 0, inter = 0;
   for (let i = 0; i < ink.length; i++) {
