@@ -67,6 +67,17 @@ CREATE TABLE IF NOT EXISTS job_events (
 );
 `);
 
+for (const [table, column, type] of [
+  ["jobs", "request_key", "TEXT"],
+  ["jobs", "cancel_requested", "INTEGER NOT NULL DEFAULT 0"],
+  ["machines", "needs_inspection", "INTEGER NOT NULL DEFAULT 0"],
+]) {
+  if (!db.prepare(`PRAGMA table_info(${table})`).all().some((field) => field.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS jobs_user_request ON jobs(user_id, request_key)");
+
 // Dữ liệu mẫu cho lần chạy đầu tiên
 function seed() {
   const count = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;

@@ -1,3 +1,4 @@
+const realtime = require("./realtime");
 const fs = require("fs");
 const path = require("path");
 const { createHash, randomUUID } = require("node:crypto");
@@ -128,7 +129,7 @@ router.get("/drawings/:id/image", (req, res) => {
 
 // ---------------- Machines (Machine Selector) ----------------
 router.get("/machines", (req, res) => {
-  const rows = db.prepare(`SELECT m.id, m.name, m.state, m.online, m.last_seen, m.work_width, m.work_height,
+  const rows = db.prepare(`SELECT m.id, m.name, m.state, m.online, m.last_seen, m.work_width, m.work_height, m.needs_inspection,
       (SELECT COUNT(*) FROM jobs j WHERE j.machine_id = m.id AND j.status = 'QUEUED') AS queued
     FROM machines m WHERE m.enabled = 1 ORDER BY m.id`).all();
   res.json({ machines: rows });
@@ -138,20 +139,37 @@ router.get("/machines", (req, res) => {
 router.post("/jobs", (req, res) => {
   const drawingId = Number(req.body.drawingId);
   const machineId = String(req.body.machineId || "");
+  const requestKey = req.body.requestKey ?? null;
+  if (requestKey !== null) {
+    if (typeof requestKey !== "string" || !/^[0-9a-f]{32}$/.test(requestKey)) {
+      return res.status(400).json({ error: "Mã yêu cầu không hợp lệ" });
+    }
+    const existing = db.prepare("SELECT id, drawing_id, machine_id FROM jobs WHERE user_id = ? AND request_key = ?")
+      .get(req.user.id, requestKey);
+    if (existing) {
+      if (existing.drawing_id !== drawingId || existing.machine_id !== machineId) {
+        return res.status(409).json({ error: "Mã yêu cầu đã được dùng cho bản vẽ khác" });
+      }
+      return res.json({ job: dispatcher.getJob(existing.id) });
+    }
+  }
   const d = db.prepare("SELECT * FROM drawings WHERE id = ?").get(drawingId);
   if (!d || (d.user_id !== req.user.id && req.user.role !== "admin")) return res.status(404).json({ error: "Không tìm thấy bản vẽ" });
   const m = db.prepare("SELECT * FROM machines WHERE id = ? AND enabled = 1").get(machineId);
   if (!m) return res.status(404).json({ error: "Không tìm thấy máy" });
   const error = validateGcode(fs.readFileSync(d.gcode_path, "utf8"), machineArea(m));
   if (error) return res.status(409).json({ error });
-  const job = dispatcher.enqueue({ drawingId, machineId, userId: req.user.id });
+  const job = dispatcher.enqueue({ drawingId, machineId, userId: req.user.id, requestKey });
   res.status(201).json({ job });
 });
 
 router.get("/jobs", (req, res) => {
   const all = req.user.role === "admin" && req.query.all === "1";
   const rows = db.prepare(`
-    SELECT j.*, d.name AS drawing_name, u.username, m.name AS machine_name
+    SELECT j.*, d.name AS drawing_name, u.username, m.name AS machine_name,
+      m.online AS machine_online, m.state AS machine_state, m.needs_inspection,
+      (SELECT COUNT(*) FROM jobs q WHERE q.machine_id = j.machine_id AND q.id < j.id
+        AND q.status IN ('QUEUED','SENDING','READY','DRAWING','PAUSED')) AS ahead
     FROM jobs j JOIN drawings d ON d.id = j.drawing_id JOIN users u ON u.id = j.user_id JOIN machines m ON m.id = j.machine_id
     ${all ? "" : "WHERE j.user_id = ?"} ORDER BY j.id DESC LIMIT 100`).all(...(all ? [] : [req.user.id]));
   res.json({ jobs: rows });
@@ -219,6 +237,18 @@ admin.post("/machines/:id/home", wrap(async (req, res) => {
   await dispatcher.publish(`cnc/${m.id}/cmd`, { cmd: "HOME" });
   res.json({ ok: true });
 }));
+
+admin.post("/machines/:id/inspection", (req, res) => {
+  const m = publicMachine(req.params.id);
+  if (!m) return res.status(404).json({ error: "Không tìm thấy máy" });
+  if (!m.online || m.state !== "IDLE") return res.status(409).json({ error: "Máy phải trực tuyến và ở trạng thái rảnh." });
+  if (m.needs_inspection) {
+    db.prepare("UPDATE machines SET needs_inspection = 0 WHERE id = ?").run(m.id);
+    realtime.emit("machine.status", publicMachine(m.id));
+    dispatcher.tryDispatch(m.id);
+  }
+  res.json({ ok: true });
+});
 
 admin.get("/users", (req, res) => res.json({ users: db.prepare("SELECT id, username, role, locked, created_at FROM users ORDER BY id").all() }));
 

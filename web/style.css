@@ -978,8 +978,19 @@ main {
 }
 
 /* Active Job Quick Bar */
+#activeJobNotice {
+  flex-basis: 100%;
+  order: 1;
+}
+
+#activeJobNotice:empty,
+#draftStatus:empty {
+  display: none;
+}
+
 .active-job-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;

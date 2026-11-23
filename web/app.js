@@ -1,3 +1,4 @@
+import { readDraft, writeDraft, deleteDraft } from "./draft.js";
 import { paintPreview, playbackPosition, readMoves } from "./preview.js";
 
 // Pixel2Plot Operator — web client (ES module thuần, chạy thẳng trên trình duyệt)
@@ -8,7 +9,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const STATUS_VI = {
   QUEUED: "Hàng đợi", SENDING: "Đang truyền", READY: "Sẵn sàng", DRAWING: "Đang vẽ", PAUSED: "Tạm dừng",
   COMPLETED: "Hoàn thành", CANCELLED: "Đã hủy", FAILED: "Lỗi",
-  IDLE: "Sẵn sàng", OFFLINE: "Mất kết nối", RECEIVING: "Nhận file", HOMING: "Về gốc", ERROR: "Lỗi máy", BOOT: "Khởi động",
+  WAIT_PAPER: "Chờ giấy", INSPECTION: "Chờ kiểm tra giấy", IDLE: "Sẵn sàng", OFFLINE: "Mất kết nối", RECEIVING: "Nhận file", HOMING: "Về gốc", ERROR: "Lỗi máy", BOOT: "Khởi động",
 };
 const badge = (s) => `<span class="badge ${esc(s)}">${esc(STATUS_VI[s] || s)}</span>`;
 
@@ -90,6 +91,8 @@ function logout() {
   $("#jobDetails").close();
   $("#jobRows").replaceChildren();
   $$("#admMachines, #admUsers, #admQueue").forEach((table) => table.replaceChildren());
+  pendingSend = null;
+  trackingReady = false;
   resetWorkspace();
   $("#appView").classList.add("hidden");
   $("#loginView").classList.remove("hidden");
@@ -102,8 +105,16 @@ function enterApp() {
   $("#whoami").textContent = `${app.user.username} (${app.user.role === "admin" ? "Quản trị" : "Người dùng"})`;
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", app.user.role !== "admin"));
   connectWs();
-  loadMachines().catch((err) => toast(err.message, "err"));
+  pendingSend = readPendingSend();
+  const token = app.token;
+  const machinesReady = loadMachines().catch((err) => toast(err.message, "err"));
+  refreshTrackedJob().catch((err) => toast(err.message, "err"));
+  machinesReady.then(() => {
+    if (app.token === token) restoreDraft();
+  });
   showTab("draw");
+  if (pendingSend) $("#sendMsg").textContent = "Có một lần gửi chưa xác nhận. Chọn Xác nhận lại lần gửi.";
+  syncActions();
 }
 
 // ---------------- Tabs ----------------
@@ -138,6 +149,81 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 let file, original, originalUrl, preview, displayed, previewTimer, previewRequest, tuneRequest;
 const TUNE_LABELS = { fast: "Nhanh", detail: "Chi tiết" };
 let revision = 0, candidates = [], savedDrawingId, sentJob, activeJob = null, sending = false, view = "paths";
+let pendingSend, restoredDraft = false, draftEpoch = 0;
+let liveConnected = false, jobVersion = 0, refreshTimer, trackingReady = false;
+const userKey = () => `${app.user.id}:${app.user.username}`;
+const storageKey = (name) => `pixel2plot:${name}:${userKey()}`;
+
+function readPendingSend() {
+  try { return JSON.parse(localStorage.getItem(storageKey("pending"))); }
+  catch { return null; }
+}
+
+function setPendingSend(request) {
+  pendingSend = request;
+  try {
+    if (request) localStorage.setItem(storageKey("pending"), JSON.stringify(request));
+    else localStorage.removeItem(storageKey("pending"));
+  } catch {
+    if (request) toast("Trình duyệt không lưu được lần gửi này. Hãy giữ trang mở nếu cần thử lại.", "warn");
+  }
+}
+
+const draftControls = () => [...form.querySelectorAll("input[name], select[name]")].filter((el) => el !== fileInput);
+
+function saveDraft() {
+  if (!app.user || !file) return;
+  const token = app.token, epoch = ++draftEpoch;
+  const settings = Object.fromEntries(draftControls().map((el) => [el.name, el.type === "checkbox" ? el.checked : el.value]));
+  writeDraft(userKey(), { file, settings, machineId: app.selectedMachine, sentId: sentJob?.id }).catch(() => {
+    if (app.token === token && epoch === draftEpoch) $("#draftStatus").textContent = "Trình duyệt không lưu được bản nháp.";
+  });
+}
+
+async function restoreDraft() {
+  const token = app.token;
+  try {
+    const draft = await readDraft(userKey());
+    if (!draft || token !== app.token || file) return;
+    for (const el of draftControls()) {
+      if (!Object.hasOwn(draft.settings, el.name)) continue;
+      if (el.type === "checkbox") el.checked = draft.settings[el.name];
+      else el.value = draft.settings[el.name];
+    }
+    if (app.machines.some((m) => m.id === draft.machineId)) {
+      app.selectedMachine = draft.machineId;
+      renderMachinePick();
+    }
+    updateFormLabels();
+    handleSelectedFile(draft.file);
+    if (draft.sentId) {
+      sentJob = activeJob?.id === draft.sentId ? activeJob : { id: draft.sentId, status: "QUEUED" };
+      saveDraft();
+      refreshTrackedJob().catch((err) => toast(err.message, "err"));
+    }
+    restoredDraft = true;
+    $("#draftStatus").textContent = "Đã khôi phục bản nháp trên trình duyệt này.";
+    syncActions();
+  } catch {
+    if (app.token === token) $("#draftStatus").textContent = "Trình duyệt không đọc được bản nháp.";
+  }
+}
+
+$("#discardDraft").onclick = async () => {
+  if (!app.user || pendingSend || sending) return;
+  const token = app.token;
+  try {
+    const key = userKey();
+    const tracked = activeJob;
+    resetWorkspace();
+    activeJob = tracked;
+    renderActiveJobBar();
+    await deleteDraft(key);
+  } catch {
+    if (token === app.token) $("#draftStatus").textContent = "Chưa xóa được bản nháp khỏi trình duyệt.";
+  }
+};
+
 const playback = { open: false, progress: 0, frame: null };
 const PLAYBACK_MS = 12000;
 
@@ -288,20 +374,22 @@ function syncActions() {
   $("#downloadBtn").disabled = !preview;
   $("#gcodeDetails").classList.toggle("hidden", !preview);
 
-  const canSend = Boolean(preview) && Boolean(app.selectedMachine) && !sending && !sentJob && !tuneRequest;
+  const canSend = !sending && (pendingSend || (preview && app.selectedMachine && !sentJob && !tuneRequest));
   $("#sendBtn").disabled = !canSend;
-  $("#sendBtn").textContent = sending ? "Đang gửi…" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
+  $("#sendBtn").textContent = sending ? "Đang gửi…" : pendingSend ? "Xác nhận lại lần gửi" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
   $("#showSentJob").classList.toggle("hidden", !sentJob);
-  form.inert = sending;
-  fileInput.disabled = sending;
-  if ($("#machineSelect")) $("#machineSelect").disabled = sending;
+  form.inert = sending || Boolean(pendingSend);
+  fileInput.disabled = sending || Boolean(pendingSend);
+  $("#discardDraft").hidden = !file;
+  $("#discardDraft").disabled = sending || Boolean(pendingSend);
+  if ($("#machineSelect")) $("#machineSelect").disabled = sending || Boolean(pendingSend);
   if ($("#autoBtn")) {
-    $("#autoBtn").disabled = !file || !form.checkValidity() || Boolean(tuneRequest);
+    $("#autoBtn").disabled = !file || !form.checkValidity() || Boolean(tuneRequest) || Boolean(pendingSend);
     $("#autoBtn").textContent = tuneRequest?.profile === "both" ? "Đang tìm…" : "Gợi ý cấu hình";
   }
   $$("[data-tune]").forEach((button) => {
     const profile = button.dataset.tune;
-    button.disabled = !file || !form.checkValidity() || Boolean(tuneRequest);
+    button.disabled = !file || !form.checkValidity() || Boolean(tuneRequest) || Boolean(pendingSend);
     button.textContent = tuneRequest?.profile === profile ? "Đang tìm…" : TUNE_LABELS[profile];
   });
 
@@ -313,7 +401,7 @@ function syncActions() {
 function renderActiveJobBar() {
   const bar = $("#activeJobBar");
   if (!bar) return;
-  const current = sentJob || (activeJob && ["QUEUED", "SENDING", "READY", "DRAWING", "PAUSED"].includes(activeJob.status) ? activeJob : null);
+  const current = sentJob || activeJob;
   if (!current) {
     bar.classList.add("hidden");
     return;
@@ -321,15 +409,21 @@ function renderActiveJobBar() {
   bar.classList.remove("hidden");
   $("#activeJobTitle").textContent = `Phiên #${current.id}: ${current.drawing_name || "Bản vẽ"} (${current.machine_name || current.machine_id})`;
   $("#activeJobBadge").innerHTML = badge(current.status);
+  $("#activeJobNotice").textContent = [
+    !liveConnected || !trackingReady ? "Tiến độ cuối đã nhận · đang chờ đồng bộ." : "",
+    jobNotice(current),
+  ].filter(Boolean).join(" ");
   const pct = Number(current.progress) || 0;
   $("#activeJobBarFill").style.width = `${pct}%`;
   $("#activeJobPercent").textContent = `${pct}%`;
 
   const btn = (act, label, cls = "") => `<button type="button" class="small ${cls}" data-quick-job="${current.id}" data-act="${act}">${label}</button>`;
+  const canControl = liveConnected && trackingReady && !current.cancel_requested && (current.machine_online || current.status === "QUEUED");
   const actions = [
-    current.status === "DRAWING" && btn("pause", "Tạm dừng"),
-    current.status === "PAUSED" && btn("resume", "Tiếp tục"),
-    !["COMPLETED", "CANCELLED", "FAILED"].includes(current.status) && btn("cancel", "Hủy", "danger"),
+    canControl && current.status === "DRAWING" && btn("pause", "Tạm dừng"),
+    canControl && current.status === "PAUSED" && btn("resume", "Tiếp tục"),
+    !current.cancel_requested && (current.status === "QUEUED" || liveConnected && trackingReady)
+      && !["COMPLETED", "CANCELLED", "FAILED"].includes(current.status) && btn("cancel", "Hủy", "danger"),
     `<button type="button" class="small ghost" data-quick-job="${current.id}" data-act="details">Chi tiết</button>`,
   ].filter(Boolean).join(" ");
   $("#activeJobActions").innerHTML = actions;
@@ -344,18 +438,20 @@ $("#activeJobBar")?.addEventListener("click", async (e) => {
     openJobDetails(id);
     return;
   }
+  const token = app.token, version = jobVersion;
   btn.disabled = true;
   try {
     const { job } = await api(`/jobs/${id}/${act}`, { method: "POST" });
-    if (sentJob && sentJob.id === id) sentJob = job;
-    if (activeJob && activeJob.id === id) activeJob = job;
-    renderActiveJobBar();
-    replaceJobRow(job);
-    toast(`Phiên #${id}: Đã gửi lệnh ${act === "pause" ? "tạm dừng" : act === "resume" ? "tiếp tục" : "hủy"}`, "ok");
+    if (app.token !== token || version !== jobVersion) return;
+    onJobStatus(job);
+    const message = act === "cancel" ? (jobNotice(job) || "Đã hủy lượt đang chờ.") :
+      `Đã gửi lệnh ${act === "pause" ? "tạm dừng" : "tiếp tục"}.`;
+    toast(`Phiên #${id}: ${message}`, job.cancel_requested ? "warn" : "ok");
   } catch (err) {
     toast(err.message, "err");
   } finally {
     btn.disabled = false;
+    if (app.token === token) refreshJobViews();
   }
 });
 
@@ -366,7 +462,7 @@ function clearTuneResult() {
   $("#autoResult").replaceChildren();
 }
 
-function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = false } = {}) {
+function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = false, keepSubmission = false } = {}) {
   const current = ++revision;
   clearTimeout(previewTimer);
   previewTimer = null;
@@ -377,16 +473,20 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
   preview = null;
   if (!keepImage || !form.checkValidity()) displayed = null;
   if (!displayed && view === "compare") view = "paths";
-  savedDrawingId = null;
-  sentJob = null;
+  if (!keepSubmission) {
+    savedDrawingId = null;
+    sentJob = null;
+  }
   $("#stats").textContent = "";
+  $("#printHint").hidden = true;
   $("#gcodeText").textContent = "";
   $("#gcodeDetails").open = false;
-  $("#sendMsg").textContent = "";
+  if (!pendingSend) $("#sendMsg").textContent = "";
   $("#retryPreview").classList.add("hidden");
   syncActions();
   drawPreview();
   if (!file) { $("#convertMsg").textContent = ""; return; }
+  saveDraft();
   if (!form.checkValidity()) {
     const invalid = form.querySelector(":invalid");
     const label = invalid?.labels?.[0]?.childNodes[0]?.textContent.trim() || "Thông số";
@@ -419,9 +519,11 @@ async function runPreview(current) {
     const [left, bottom, right, top] = s.bbox;
     $("#stats").textContent = [
       `${Number((right - left).toFixed(1))} × ${Number((top - bottom).toFixed(1))} mm`,
-      `${s.paths} nét`, `ước tính ~${s.minutes} phút`, `độ khớp ${s.iou}%`,
+      `${s.paths} nét`, `ước tính ~${s.minutes} phút`, `độ khớp mô phỏng ${s.iou}%`,
       `tách nét: ${METHOD_VI[s.binarize.method] || s.binarize.method}`,
     ].join(" · ");
+    $("#printHint").textContent = `Mô phỏng dùng bề rộng nét ${result.params.penWidthMm} mm. Hãy xem So nét ở kích thước đã chọn và thử trên giấy nếu có nét mảnh sát nhau.`;
+    $("#printHint").hidden = false;
     $("#gcodeText").textContent = result.gcode.length > 200000 ? result.gcode.slice(0, 200000) + "\n…" : result.gcode;
     $("#convertMsg").textContent = "Bản xem trước sẵn sàng.";
     drawPreview();
@@ -455,6 +557,9 @@ function updateFormLabels() {
 function resetWorkspace() {
   releaseOriginal();
   file = null;
+  restoredDraft = false;
+  ++draftEpoch;
+  $("#draftStatus").textContent = "";
   fileInput.value = "";
   form.reset();
   updateFormLabels();
@@ -474,16 +579,19 @@ function resetWorkspace() {
 }
 
 function handleSelectedFile(newFile) {
+  if (!newFile || sending || pendingSend && file) return;
+  const error = $("#fileError");
+  const message = !["image/png", "image/jpeg"].includes(newFile.type)
+    ? "Chọn ảnh định dạng PNG hoặc JPG."
+    : newFile.size > MAX_FILE_SIZE ? "Ảnh vượt quá 5 MB. Chọn ảnh nhỏ hơn." : "";
+  error.textContent = message || "";
+  error.hidden = !message;
+  if (message) { fileInput.value = ""; return; }
   releaseOriginal();
   file = newFile;
   view = "paths";
-  const error = $("#fileError");
-  const message = file && (!["image/png", "image/jpeg"].includes(file.type)
-    ? "Chọn ảnh định dạng PNG hoặc JPG."
-    : file.size > MAX_FILE_SIZE ? "Ảnh vượt quá 5 MB. Chọn ảnh nhỏ hơn." : "");
-  error.textContent = message || "";
-  error.hidden = !message;
-  if (message) { fileInput.value = ""; file = null; }
+  if (restoredDraft) $("#draftStatus").textContent = "";
+  restoredDraft = false;
   $("#fileInfo").textContent = file ? file.name : "PNG hoặc JPG · tối đa 5 MB";
   if (file) {
     originalUrl = URL.createObjectURL(file);
@@ -516,7 +624,7 @@ if (dropZone) {
     e.preventDefault();
     dropZone.classList.remove("dragover");
     const droppedFile = e.dataTransfer?.files?.[0];
-    if (droppedFile) {
+    if (droppedFile && !pendingSend) {
       handleSelectedFile(droppedFile);
     }
   });
@@ -564,7 +672,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) pausePlayback();
 });
 $("#showTravel").onchange = drawPreview;
-$("#retryPreview").onclick = () => schedulePreview({ delay: 0 });
+$("#retryPreview").onclick = () => schedulePreview({ delay: 0, keepSubmission: true });
 new ResizeObserver(drawPreview).observe(canvas.parentElement);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawPreview);
 
@@ -576,7 +684,7 @@ if ($("#autoBtn")) {
 }
 
 async function tuneDrawing(profile) {
-  if (tuneRequest || sending) return;
+  if (tuneRequest || sending || pendingSend) return;
   const controller = new AbortController();
   const request = { controller, profile };
   tuneRequest = request;
@@ -601,19 +709,19 @@ async function tuneDrawing(profile) {
         + candidates.map((c, i) => `
           <div class="cand">
             <small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small>
-            <small>Trùng diện tích nét ${c.metrics.iou}% · giữ ${c.metrics.coverage ?? 0}% nét</small>
+            <small>Trùng nét mô phỏng ${c.metrics.iou}% · giữ ${c.metrics.coverage ?? 0}% nét</small>
             <small>Ước tính ${c.metrics.minutes.toLocaleString("vi-VN")} phút · ${c.metrics.paths} lượt đi nét</small>
             <button type="button" class="small" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
           </div>`).join("");
     } else {
       const [candidate] = candidates;
-      if (!candidate) return;
+      if (!candidate) { panel.textContent = "Chưa tìm được nét phù hợp. Kiểm tra ảnh gốc hoặc đổi ảnh."; return; }
       const { params, metrics } = candidate;
       applyParams(params);
       const number = (value) => value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
       panel.innerHTML = `<div class="cand">
         <b>${TUNE_LABELS[profile]} · ${MODE_VI[params.mode]}</b>
-        <small>Trùng diện tích nét ${number(metrics.iou)}% · ước tính vẽ ${number(metrics.minutes)} phút</small>
+        <small>Trùng nét mô phỏng ${number(metrics.iou)}% · ước tính vẽ ${number(metrics.minutes)} phút</small>
         <small>Tìm trong ${number(result.ms / 1000)} giây · kiểm tra kỹ ${result.verified}/${result.tried} cấu hình</small>
         ${result.timeLimited ? "<small>Đã hết thời gian tìm. Dùng kết quả tốt nhất đã kiểm tra.</small>" : ""}
       </div>`;
@@ -674,44 +782,51 @@ $("#downloadBtn").onclick = () => {
 
 $("#showSentJob").onclick = () => showTab("jobs");
 $("#sendBtn").onclick = async () => {
-  if (sending || tuneRequest || sentJob || !preview || !app.selectedMachine) return;
+  if (sending || (!pendingSend && (tuneRequest || sentJob || !preview || !app.selectedMachine))) return;
   const current = revision;
   const token = app.token;
   const machineId = app.selectedMachine;
-  const { previewHash, requestParams } = preview;
   sending = true;
-  $("#sendMsg").textContent = "Đang lưu và gửi bản vẽ…";
+  $("#sendMsg").textContent = pendingSend ? "Đang kiểm tra lần gửi trước…" : "Đang lưu và gửi bản vẽ…";
   syncActions();
   try {
-    let drawingId = savedDrawingId;
-    if (!drawingId) {
-      const body = uploadData(requestParams, machineId);
-      body.append("previewHash", previewHash);
-      const result = await api("/drawings", { method: "POST", body });
-      if (app.token !== token) return;
-      drawingId = result.drawing.id;
-      if (current === revision) savedDrawingId = drawingId;
-    }
-    const { job } = await api("/jobs", { method: "POST", json: { drawingId, machineId } });
-    if (current === revision) {
-      sentJob = job;
-      activeJob = job;
-      $("#sendMsg").textContent = `Phiên #${job.id} đã vào hàng đợi của ${job.machine_name}.`;
-    } else if (app.token === token) {
-      toast(`Phiên #${job.id} đã vào hàng đợi của ${job.machine_name}.`, "ok");
-    }
-  } catch (err) {
-    if (current === revision) {
-      if (err.status === 409 && !savedDrawingId) {
-        $("#sendMsg").textContent = "Bản xem trước đã thay đổi. Đang cập nhật...";
-        await loadMachines().catch(() => {});
+    if (!pendingSend) {
+      let drawingId = savedDrawingId;
+      if (!drawingId) {
+        const { previewHash, requestParams } = preview;
+        const body = uploadData(requestParams, machineId);
+        body.append("previewHash", previewHash);
+        const result = await api("/drawings", { method: "POST", body });
         if (app.token !== token) return;
-        schedulePreview({ delay: 0 });
-      } else {
-        $("#sendMsg").textContent = `Lỗi gửi: ${err.message}`;
+        drawingId = result.drawing.id;
+        if (current === revision) savedDrawingId = drawingId;
       }
+      const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+      setPendingSend({ drawingId, machineId, requestKey });
     }
-    else if (app.token === token) toast(err.message, "err");
+    const version = jobVersion;
+    const { job } = await api("/jobs", { method: "POST", json: pendingSend });
+    if (app.token !== token) return;
+    rememberJob(job.id);
+    setPendingSend(null);
+    sentJob = version !== jobVersion && activeJob?.id === job.id ? activeJob : job;
+    activeJob = sentJob;
+    trackingReady = liveConnected;
+    saveDraft();
+    $("#sendMsg").textContent = `Đã nhận phiên #${job.id} · ${job.machine_name}.`;
+  } catch (err) {
+    if (app.token !== token) return;
+    if (pendingSend && (!err.status || err.status >= 500)) {
+      $("#sendMsg").textContent = "Chưa nhận được xác nhận. Chọn Xác nhận lại lần gửi để kiểm tra cùng yêu cầu.";
+    } else if (err.status === 409 && !pendingSend && !savedDrawingId) {
+      await loadMachines().catch(() => {});
+      if (app.token !== token) return;
+      schedulePreview({ delay: 0 });
+      $("#sendMsg").textContent = "Bản xem trước đã thay đổi. Đang cập nhật…";
+    } else {
+      setPendingSend(null);
+      $("#sendMsg").textContent = `Chưa gửi được: ${err.message}`;
+    }
   } finally {
     if (app.token === token) { sending = false; syncActions(); }
   }
@@ -738,7 +853,7 @@ function machineChanged() {
   const { w, h } = workArea();
   form.widthMm.max = Math.max(w, 150);
   form.heightMm.max = Math.max(h, 150);
-  schedulePreview();
+  if (!sending && !pendingSend) schedulePreview({ keepSubmission: true });
 }
 
 function renderMachinePick() {
@@ -759,6 +874,10 @@ function renderMachinePick() {
   $("#machineSelect").onchange = (event) => {
     app.selectedMachine = event.target.value;
     renderMachineInfo();
+    if (file) {
+      sentJob = null;
+      savedDrawingId = null;
+    }
     machineChanged();
   };
   renderMachineInfo();
@@ -772,7 +891,7 @@ function renderMachineInfo() {
   info.innerHTML = m ? `
     <div class="machine-meta">
       <span>Vùng vẽ: <strong>${m.work_width} × ${m.work_height} mm</strong></span>
-      ${badge(m.state)}
+      ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
     </div>
     ${m.online ? "" : '<p class="muted option-hint error">Máy đang mất kết nối. Lệnh gửi sẽ chờ trong hàng đợi.</p>'}`
     : '<p class="muted option-hint">Chọn máy vẽ để tiếp tục.</p>';
@@ -785,7 +904,7 @@ function renderMachineCards() {
     <div class="card">
       <div class="pane-title pane-title-actions">
         <h2>${esc(m.name)}</h2>
-        ${badge(m.state)}
+        ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
       </div>
       <div class="pane-body">
         <p class="muted">
@@ -814,12 +933,33 @@ async function loadJobs() {
 
 $("#allJobs").onchange = () => loadJobs().catch((err) => toast(err.message, "err"));
 
+function jobNotice(job) {
+  const machine = app.machines.find((m) => m.id === job.machine_id);
+  const online = machine?.online ?? job.machine_online;
+  const state = machine?.state ?? job.machine_state;
+  if (job.cancel_requested) return online
+    ? "Đang chờ máy xác nhận dừng."
+    : "Chưa xác nhận dừng · máy mất kết nối. Nếu cần dừng ngay, dùng nút Stop tại máy.";
+  if (job.status === "QUEUED") {
+    const ahead = job.ahead > 0 ? ` Có ${job.ahead} lượt trước bạn.` : "";
+    const wait = !online ? "Đang chờ máy kết nối." : (machine?.needs_inspection ?? job.needs_inspection)
+      ? "Đang chờ người tại máy kiểm tra giấy."
+      : state === "WAIT_PAPER" ? "Đang chờ giấy." : "Đã vào hàng đợi.";
+    return wait + ahead;
+  }
+  if (["SENDING", "READY", "DRAWING", "PAUSED"].includes(job.status)) {
+    if (!online) return "Máy mất kết nối. Đây là tiến độ đã nhận gần nhất.";
+    if (state === "WAIT_PAPER") return "Đang chờ người tại máy đặt giấy.";
+  }
+  return job.error || "";
+}
+
 function jobRow(j) {
   const btn = (action, label, cls = "") => `<button class="small ${cls}" data-job="${j.id}" data-act="${action}" ${pendingJobActions.has(j.id) ? "disabled" : ""}>${label}</button>`;
   const actions = [
-    j.status === "DRAWING" && btn("pause", "Tạm dừng"),
-    j.status === "PAUSED" && btn("resume", "Tiếp tục"),
-    !["COMPLETED", "CANCELLED", "FAILED"].includes(j.status) && btn("cancel", "Hủy", "danger"),
+    liveConnected && j.machine_online && !j.cancel_requested && j.status === "DRAWING" && btn("pause", "Tạm dừng"),
+    liveConnected && j.machine_online && !j.cancel_requested && j.status === "PAUSED" && btn("resume", "Tiếp tục"),
+    !j.cancel_requested && (liveConnected || j.status === "QUEUED") && !["COMPLETED", "CANCELLED", "FAILED"].includes(j.status) && btn("cancel", "Hủy", "danger"),
     `<button class="small ghost btn-detail" type="button" data-details="${j.id}">Chi tiết</button>`,
   ].filter(Boolean).join(" ");
   const progress = Number(j.progress) || 0;
@@ -828,7 +968,7 @@ function jobRow(j) {
     <td class="col-name"><button class="job-name" type="button" data-details="${j.id}">${esc(j.drawing_name)}</button><small class="job-ref">#${j.id} · ${esc(j.machine_name)}</small></td>
     <td class="col-mach">${esc(j.machine_name)}</td>
     <td class="col-user">${esc(j.username)}</td>
-    <td class="col-status">${badge(j.status)}${j.error ? `<br/><small class="error">${esc(j.error)}</small>` : ""}</td>
+    <td class="col-status">${badge(j.status)}${jobNotice(j) ? `<br/><small>${esc(jobNotice(j))}</small>` : ""}</td>
     <td class="col-progress"><div class="bar"><span style="width:${progress}%"></span></div><small class="tabular-nums">${progress}%</small></td>
     <td class="col-time"><small class="tabular-nums">${formatDate(j.created_at)}</small></td>
     <td class="col-actions"><div class="job-actions">${actions}</div></td>
@@ -849,7 +989,10 @@ const EVENT_VI = {
   JOB_FAILED: "Lỗi trong quá trình vẽ",
   PAUSED: "Đã tạm dừng",
   RESUMED: "Đã tiếp tục vẽ",
-  CANCELLED: "Đã hủy phiên vẽ",
+  CANCEL_REQUESTED: "Đã yêu cầu hủy, đang chờ máy xác nhận",
+  CANCELLED_IN_QUEUE: "Đã rút phiên khỏi hàng đợi",
+  CANCELLED: "Máy xác nhận đã dừng phiên",
+  JOB_INTERRUPTED: "Mất phiên đang thực hiện, cần kiểm tra giấy",
 };
 
 function formatTimeOnly(value) {
@@ -894,6 +1037,7 @@ async function openJobDetails(id) {
           </div>
         </div>
       </div>
+      ${jobNotice(job) ? `<p class="muted">${esc(jobNotice(job))}</p>` : ""}
       <div class="job-timeline-wrap">
         <h3 class="timeline-title">Nhật ký phiên</h3>
         ${events.length ? `
@@ -927,18 +1071,17 @@ jobsBody.addEventListener("click", async (event) => {
   if (pendingJobActions.has(id)) return;
   pendingJobActions.add(id);
   button.closest("tr").querySelectorAll("[data-act]").forEach((action) => { action.disabled = true; });
+  const token = app.token, version = jobVersion;
   let updated;
   try { ({ job: updated } = await api(`/jobs/${id}/${button.dataset.act}`, { method: "POST" })); }
   catch (err) { toast(err.message, "err"); }
   finally {
     pendingJobActions.delete(id);
-    if (updated) {
-      replaceJobRow(updated);
-      if (sentJob?.id === id) sentJob = updated;
-      if (activeJob?.id === id) activeJob = updated;
-      renderActiveJobBar();
+    if (app.token === token) {
+      if (updated && version === jobVersion) onJobStatus(updated);
+      else $(`#job-${id}`)?.querySelectorAll("[data-act]").forEach((action) => { action.disabled = false; });
+      refreshJobViews();
     }
-    else $(`#job-${id}`)?.querySelectorAll("[data-act]").forEach((action) => { action.disabled = false; });
   }
 });
 
@@ -962,9 +1105,11 @@ async function loadAdmin() {
   const [{ machines }, { users }, { jobs }] = await Promise.all([api("/admin/machines"), api("/admin/users"), api("/admin/queue")]);
   if (token !== app.token) return;
   $("#admMachines").innerHTML = machines.map((m) => `<tr>
-    <td><code>${esc(m.id)}</code></td><td>${esc(m.name)}</td><td>${badge(m.state)}${m.enabled ? "" : " (tắt)"}</td>
+    <td><code>${esc(m.id)}</code></td><td>${esc(m.name)}</td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " (tắt)"}</td>
     <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><code>${esc(m.token)}</code></td>
-    <td><button class="small ghost" data-m="${esc(m.id)}" data-a="home">Về gốc</button>
+    <td>${m.needs_inspection && m.online && m.state === "IDLE"
+          ? `<button class="small" data-m="${esc(m.id)}" data-a="inspection">Xác nhận đã kiểm tra giấy</button>` : ""}
+        <button class="small ghost" data-m="${esc(m.id)}" data-a="home">Về gốc</button>
         <button class="small ghost" data-m="${esc(m.id)}" data-a="token">Đổi token</button>
         <button class="small ${m.enabled ? "danger" : "ghost"}" data-m="${esc(m.id)}" data-a="toggle" data-en="${m.enabled}">${m.enabled ? "Tắt" : "Bật"}</button></td></tr>`).join("");
   $("#admUsers").innerHTML = users.map((u) => `<tr>
@@ -978,6 +1123,11 @@ $("#admMachines").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-m]");
   if (!b) return;
   try {
+    if (b.dataset.a === "inspection") {
+      if (!confirm("Bạn đã kiểm tra giấy và vùng vẽ tại máy? Lượt kế tiếp có thể bắt đầu ngay.")) return;
+      await api(`/admin/machines/${b.dataset.m}/inspection`, { method: "POST" });
+      toast("Đã xác nhận kiểm tra giấy.", "ok");
+    }
     if (b.dataset.a === "home") { await api(`/admin/machines/${b.dataset.m}/home`, { method: "POST" }); toast("Đã gửi lệnh về gốc", "ok"); }
     if (b.dataset.a === "token" && confirm("Cấp token mới? Máy phải cập nhật token mới mới kết nối lại được.")) {
       await api(`/admin/machines/${b.dataset.m}/token`, { method: "POST" });
@@ -1010,41 +1160,85 @@ $("#addUserForm").addEventListener("submit", async (e) => {
 });
 
 // ---------------- Realtime (WebSocket) ----------------
-function setConnection(connected, label) {
-  $("#wsDot").classList.toggle("on", connected);
-  $("#wsLabel").textContent = label;
+function rememberJob(id) {
+  try { localStorage.setItem(storageKey("job"), String(id)); }
+  catch { /* Tracking still works while the page is open. */ }
 }
 
-function connectWs(reconnecting = false) {
-  if (app.ws) {
-    try {
-      app.ws.onclose = null;
-      app.ws.onmessage = null;
-      app.ws.close();
-    } catch (_) {}
-    app.ws = null;
+async function refreshTrackedJob() {
+  const token = app.token;
+  const current = sentJob || activeJob;
+  let id = current?.id;
+  if (!id) {
+    try { id = Number(localStorage.getItem(storageKey("job"))); }
+    catch { return; }
   }
+  if (!id) return;
+  const version = jobVersion;
+  try {
+    const { job } = await api(`/jobs/${id}`);
+    if (token !== app.token || version !== jobVersion) return;
+    if (sentJob?.id === id) sentJob = job;
+    activeJob = job;
+    trackingReady = liveConnected;
+    renderActiveJobBar();
+    replaceJobRow(job);
+  } catch (error) {
+    if (token !== app.token || version !== jobVersion) return;
+    if (error.status !== 404) throw error;
+    try { localStorage.removeItem(storageKey("job")); } catch {}
+    if (sentJob?.id === id) sentJob = null;
+    if (activeJob?.id === id) activeJob = null;
+    syncActions();
+  }
+}
+
+function refreshJobViews() {
+  const token = app.token;
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (token !== app.token) return;
+    refreshTrackedJob().catch((err) => toast(err.message, "err"));
+    if (!$("#tab-jobs").classList.contains("hidden")) loadJobs().catch((err) => toast(err.message, "err"));
+  }, 180);
+}
+
+function setConnection(connected, label) {
+  liveConnected = connected;
+  if (!connected) {
+    trackingReady = false;
+    ++jobVersion;
+  }
+  $("#wsDot").classList.toggle("on", connected);
+  $("#wsLabel").textContent = label;
+  renderActiveJobBar();
+}
+
+function connectWs() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(app.token)}`);
   app.ws = ws;
-  ws.onopen = () => {
-    if (app.ws !== ws) return;
-    setConnection(true, "Đang đồng bộ");
-    if (!reconnecting) return;
-    loadMachines().catch((err) => toast(err.message, "err"));
-    if (!$("#tab-jobs").classList.contains("hidden")) loadJobs().catch((err) => toast(err.message, "err"));
-    if (!$("#tab-admin").classList.contains("hidden")) loadAdmin().catch((err) => toast(err.message, "err"));
-  };
   ws.onclose = () => {
     if (app.ws !== ws) return;
     setConnection(false, "Mất đồng bộ");
-    if (app.token && app.ws === ws) setTimeout(() => {
-      if (app.token && app.ws === ws) connectWs(true);
+    for (const button of jobsBody.querySelectorAll("[data-act]:not(.danger)")) button.disabled = true;
+    if (app.token) setTimeout(() => {
+      if (app.token && app.ws === ws) connectWs();
     }, 2000);
   };
   ws.onmessage = (ev) => {
+    if (app.ws !== ws) return;
     const { type, data } = JSON.parse(ev.data);
+    if (type === "hello") {
+      setConnection(true, "Đang đồng bộ");
+      loadMachines().catch((err) => toast(err.message, "err"));
+      refreshJobViews();
+      if (!$("#tab-admin").classList.contains("hidden")) loadAdmin().catch((err) => toast(err.message, "err"));
+    }
     if (type === "machine.status") onMachineStatus(data);
+    if (type === "queue.changed" && (data.machineId === app.selectedMachine
+      || data.machineId === (sentJob || activeJob)?.machine_id
+      || !$("#tab-jobs").classList.contains("hidden"))) refreshJobViews();
     if (type === "job.status") onJobStatus(data);
     if (type === "job.completed") toast(`Phiên #${data.id} (${data.drawing_name}) đã vẽ xong`, "ok", `job-${data.id}-completed`);
     if (type === "job.failed") toast(`Phiên #${data.id} lỗi: ${data.error}`, "err", `job-${data.id}-failed`);
@@ -1058,12 +1252,16 @@ function onMachineStatus(m) {
   syncActions();
   if (m.state === "OFFLINE") toast(`Máy ${m.name} mất kết nối`, "warn");
   if (m.event === "ERROR") toast(`Máy ${m.name}: ${m.error}`, "err");
+  refreshJobViews();
   if (!$("#tab-admin").classList.contains("hidden")) loadAdmin();
 }
 
 function onJobStatus(j) {
-  if (sentJob && sentJob.id === j.id) sentJob = j;
-  if (!activeJob || activeJob.id === j.id || (j.machine_id === app.selectedMachine && !["COMPLETED", "CANCELLED", "FAILED"].includes(j.status))) {
+  const tracked = sentJob || activeJob;
+  if (tracked?.id === j.id || !tracked && j.user_id === app.user.id) {
+    ++jobVersion;
+    trackingReady = true;
+    if (sentJob?.id === j.id) sentJob = j;
     activeJob = j;
   }
   renderActiveJobBar();

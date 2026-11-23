@@ -156,6 +156,7 @@
                 <button type="button" id="retryPreview" class="small ghost hidden">Thử lại</button>
               </div>
               <div id="stats" class="preview-stats tabular-nums" aria-live="polite"></div>
+              <p id="printHint" class="compare-legend" hidden></p>
               <p id="compareLegend" class="compare-legend" hidden>Nét xanh là đường bút. Ảnh gốc nằm bên dưới.</p>
             </div>
 
@@ -170,6 +171,7 @@
                 <div class="bar"><span id="activeJobBarFill" style="width: 0%"></span></div>
                 <span id="activeJobPercent" class="active-job-pct tabular-nums">0%</span>
               </div>
+              <small id="activeJobNotice" class="muted" role="status"></small>
               <div id="activeJobActions" class="active-job-actions"></div>
             </div>
           </section>
@@ -325,6 +327,8 @@
                 <div id="nextStepGuide" class="step-guide muted">
                   <span id="guideText">Bước 1: Chọn ảnh để bắt đầu.</span>
                 </div>
+                <p id="draftStatus" class="muted send-status" role="status"></p>
+                <button type="button" id="discardDraft" class="small ghost" hidden>Xóa bản nháp</button>
                 <p id="sendMsg" class="send-status" role="status"></p>
                 <button type="button" id="showSentJob" class="small ghost hidden">Xem trong tab Phiên vẽ</button>
                 <details id="gcodeDetails" class="gcode-details hidden">

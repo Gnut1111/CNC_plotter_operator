@@ -6,7 +6,7 @@ const realtime = require("./realtime");
 const dispatcher = require("./dispatcher");
 
 function publicMachine(id) {
-  return db.prepare("SELECT id, name, state, online, last_seen, work_width, work_height, enabled FROM machines WHERE id = ?").get(id);
+  return db.prepare("SELECT id, name, state, online, last_seen, work_width, work_height, enabled, needs_inspection FROM machines WHERE id = ?").get(id);
 }
 
 function setOffline(id, reason) {
@@ -32,11 +32,11 @@ function start() {
     const prev = publicMachine(id);
     db.prepare("UPDATE machines SET online = 1, state = ?, last_seen = ? WHERE id = ?")
       .run(String(msg.state || prev.state), new Date().toISOString(), id);
+    dispatcher.onMachineEvent(id, msg);
     const cur = publicMachine(id);
-    if (!prev.online || prev.state !== cur.state || msg.event) {
+    if (!prev.online || prev.state !== cur.state || prev.needs_inspection !== cur.needs_inspection || msg.event && msg.event !== "HEARTBEAT") {
       realtime.emit("machine.status", { ...cur, event: msg.event, error: msg.error });
     }
-    dispatcher.onMachineEvent(id, msg);
   });
 
   // Watchdog nhịp tim

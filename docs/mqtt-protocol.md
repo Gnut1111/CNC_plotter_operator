@@ -51,6 +51,7 @@ Mọi payload là **JSON UTF-8**.
 
 - Gửi tuần tự `seq = 0 … total-1`, QoS 1.
 - Máy giải base64, tính CRC32 của gói → so với `crc32`. Sai → gửi `FILE_ERROR`, hủy nhận, về `IDLE`.
+- Nếu không nhận đủ gói sau 30 giây, bỏ file dở, gửi sự kiện lỗi kèm mã phiên rồi báo máy rảnh.
 - Ghi gói vào SD/Flash. Nhận đủ gói → kiểm tra `size` và CRC32 toàn file.
   - Đúng → gửi `FILE_OK`, rồi `JOB_READY` (state `READY`), rồi **tự bắt đầu vẽ** (state `DRAWING`).
   - Sai → `FILE_ERROR`.
@@ -62,7 +63,7 @@ Mọi payload là **JSON UTF-8**.
 { "state": "DRAWING", "jobId": 12, "progress": 42.5, "event": null, "error": null, "ts": 1732250000000 }
 ```
 
-`state` ∈ `BOOT | HOMING | IDLE | RECEIVING | READY | DRAWING | PAUSED | ERROR | OFFLINE`
+`state` ∈ `BOOT | HOMING | IDLE | RECEIVING | READY | DRAWING | PAUSED | ERROR | OFFLINE`. Nếu firmware có xác nhận giấy tại máy, có thể báo `WAIT_PAPER` trong lúc chờ.
 
 `event` (tùy chọn):
 
@@ -80,7 +81,9 @@ Mọi payload là **JSON UTF-8**.
 
 - Khi `DRAWING`, gửi `progress` (0–100) mỗi khi tăng ≥ 2 %.
 - Mỗi khi `state` đổi phải gửi một bản tin.
-- Máy **về `IDLE`** sau mỗi phiên (xong/hủy/lỗi file) → server tự gửi phiên kế tiếp trong hàng đợi.
+- Khi máy rảnh, gửi rõ `"jobId": null` trong bản tin `IDLE`. Sau một phiên, phát sự kiện kết thúc kèm mã phiên trước khi báo `IDLE`.
+- Khi có mạng lại, gửi bù sự kiện kết thúc trước bản tin trạng thái đồng bộ. Nếu khởi động lại và mất file đang chạy, báo `IDLE` với `jobId: null` và sự kiện `READY`. Server đánh dấu phiên bị gián đoạn và chờ quản trị viên xác nhận đã kiểm tra giấy trước khi giao việc tiếp.
+- Khi mất mạng giữa một lượt, lệnh Hủy đợi máy kết nối lại. ESP chỉ phát `CANCELLED` sau khi đã dừng và nâng bút. Server chỉ xác nhận hủy khi nhận được sự kiện này kèm đúng mã phiên.
 - Mất Wi-Fi khi đang vẽ: **vẽ tiếp từ file cục bộ**; các sự kiện phát sinh (vd `JOB_DONE`) được **lưu lại và gửi bù** khi kết nối lại.
 
 ## 6. Luồng chuẩn

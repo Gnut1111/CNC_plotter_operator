@@ -75,10 +75,15 @@ function onCmd(m) {
   log("cmd", m.cmd, m.jobId ?? "");
   switch (m.cmd) {
     case "START_JOB":
+      if (st.jobId === m.jobId) return;
       if (st.state !== "IDLE") return send({ event: "FILE_ERROR", jobId: m.jobId, error: `BUSY (${st.state})` });
       st.jobId = m.jobId; st.progress = 0;
       st.rx = { size: m.size, total: m.chunks, crc32: m.crc32, parts: new Array(m.chunks), got: 0 };
       setState("RECEIVING");
+      st.rx.timeout = setTimeout(() => {
+        send({ event: "FILE_ERROR", error: "Không nhận đủ gói G-code" });
+        finishJob();
+      }, 30000);
       break;
     case "PAUSE":
       if (st.state === "DRAWING" && m.jobId === st.jobId) { stopDrawing(); setState("PAUSED", { event: "PEN_UP" }); }
@@ -116,11 +121,17 @@ function onChunk(m) {
     send({ event: "FILE_ERROR", error: "CRC toàn file không khớp" });
     return finishJob();
   }
+  clearTimeout(st.rx.timeout);
   st.lines = file.toString().split("\n").filter((l) => l && !l.startsWith(";"));
   st.line = 0;
   send({ event: "FILE_OK" });
   setState("READY", { event: "JOB_READY" });
-  setTimeout(() => { setState("DRAWING"); startDrawing(); }, 500);
+  const jobId = st.jobId;
+  setTimeout(() => {
+    if (st.state !== "READY" || st.jobId !== jobId) return;
+    setState("DRAWING");
+    startDrawing();
+  }, 500);
 }
 
 function startDrawing() {
@@ -142,6 +153,7 @@ function startDrawing() {
 function stopDrawing() { clearInterval(drawTimer); drawTimer = null; }
 
 function finishJob() {
+  clearTimeout(st.rx?.timeout);
   st.jobId = null; st.rx = null; st.lines = []; st.line = 0; st.progress = 0; lastPct = -1;
   setState("IDLE");
 }
@@ -157,6 +169,8 @@ if (process.stdin.isTTY) {
     if (key === "q" || key === "\u0003") process.exit(0);
     if (key === "e" || key === "l") {
       stopDrawing();
+      clearTimeout(st.rx?.timeout);
+      st.rx = null;
       const error = key === "e" ? "E-STOP được nhấn" : "Chạm công tắc hành trình";
       send({ event: "ERROR", error });
       st.jobId = null; st.lines = [];
