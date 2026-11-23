@@ -85,6 +85,7 @@ $$("[data-fill]").forEach((btn) => {
     if (f) {
       f.username.value = u;
       f.password.value = p;
+      f.username.focus();
     }
   };
 });
@@ -368,8 +369,6 @@ function updateStepGuide() {
     guideText.textContent = `Máy ${machine.name} đang mất kết nối. Lệnh gửi sẽ nằm trong hàng đợi.`;
   } else if (sending) {
     guideText.textContent = "Đang truyền dữ liệu G-code sang máy...";
-  } else if (sentJob) {
-    guideText.textContent = `Bước 4: Đã gửi phiên #${sentJob.id} vào ${sentJob.machine_name}. Theo dõi tiến độ bên dưới.`;
   } else {
     guideText.textContent = `Sẵn sàng gửi bản vẽ tới ${machine?.name || "máy"}.`;
   }
@@ -434,7 +433,9 @@ function renderActiveJobBar() {
     jobNotice(current),
   ].filter(Boolean).join(" ");
   const pct = Number(current.progress) || 0;
-  $("#activeJobBarFill").style.width = `${pct}%`;
+  const fill = $("#activeJobBarFill");
+  fill.style.width = `${pct}%`;
+  fill.classList.toggle("bar-complete", pct >= 100);
   $("#activeJobPercent").textContent = `${pct}%`;
 
   const btn = (act, label, cls = "") => `<button type="button" class="small ${cls}" data-quick-job="${current.id}" data-act="${act}">${label}</button>`;
@@ -715,7 +716,6 @@ document.addEventListener("visibilitychange", () => {
 $("#showTravel").onchange = drawPreview;
 $("#retryPreview").onclick = () => schedulePreview({ delay: 0, keepSubmission: true });
 new ResizeObserver(drawPreview).observe(canvas.parentElement);
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawPreview);
 
 $$("[data-tune]").forEach((button) => {
   button.onclick = () => tuneDrawing(button.dataset.tune);
@@ -752,16 +752,15 @@ async function tuneDrawing(profile) {
           <div class="cand">
             <div class="cand-top">
               <strong>${esc(c.label)}</strong>
-              <span class="cand-match">${c.metrics.iou}% khớp</span>
+              <span class="cand-match tabular-nums">${c.metrics.iou}%</span>
             </div>
             <div class="cand-info">
-              <small class="muted">${MODE_VI[c.params.mode]} · D:${c.params.detail} · S:${c.params.smoothing}</small>
-              <small class="muted">~${c.metrics.minutes.toLocaleString("vi-VN")}p · ${c.metrics.paths} nét</small>
+              <small class="muted">${MODE_VI[c.params.mode]} · D:${c.params.detail}</small>
+              <small class="muted tabular-nums">~${c.metrics.minutes.toLocaleString("vi-VN")}p · ${c.metrics.paths} nét</small>
             </div>
             <button type="button" class="small cand-apply-btn" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
           </div>`).join("")
         + `</div>`;
-      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } else {
       const [candidate] = candidates;
       if (!candidate) { panel.textContent = "Chưa tìm được nét phù hợp. Kiểm tra ảnh gốc hoặc đổi ảnh."; return; }
@@ -945,7 +944,7 @@ function renderMachineInfo() {
   const m = app.machines.find((machine) => machine.id === app.selectedMachine);
   info.innerHTML = m ? `
     <div class="machine-meta">
-      <span>Vùng vẽ: <strong>${m.work_width} × ${m.work_height} mm</strong></span>
+      <span>Vùng vẽ: <strong class="tabular-nums">${m.work_width} × ${m.work_height} mm</strong></span>
       ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
     </div>
     ${m.online ? "" : '<p class="muted option-hint error">Máy đang mất kết nối. Lệnh gửi sẽ chờ trong hàng đợi.</p>'}`
@@ -956,18 +955,27 @@ function renderMachineCards() {
   const container = $("#machineCards");
   if (!container) return;
   container.innerHTML = app.machines.map((m) => `
-    <div class="card">
-      <div class="pane-title pane-title-actions">
-        <h2>${esc(m.name)}</h2>
+    <div class="card machine-card">
+      <div class="machine-card-head">
+        <div>
+          <h2>${esc(m.name)}</h2>
+          <code class="machine-id-pill">${esc(m.id)}</code>
+        </div>
         ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
       </div>
-      <div class="pane-body">
-        <p class="muted">
-          Mã thiết bị: <code>${esc(m.id)}</code><br/>
-          Vùng vẽ: <strong>${m.work_width} × ${m.work_height} mm</strong><br/>
-          Hàng đợi: <strong>${m.queued}</strong><br/>
-          Tín hiệu cuối: ${m.last_seen ? new Date(m.last_seen).toLocaleTimeString("vi-VN") : "—"}
-        </p>
+      <div class="machine-metrics-grid">
+        <div class="machine-metric">
+          <span class="metric-label">Vùng vẽ</span>
+          <span class="metric-value tabular-nums">${m.work_width} × ${m.work_height} mm</span>
+        </div>
+        <div class="machine-metric">
+          <span class="metric-label">Hàng đợi</span>
+          <span class="metric-value tabular-nums">${m.queued}</span>
+        </div>
+        <div class="machine-metric">
+          <span class="metric-label">Tín hiệu cuối</span>
+          <span class="metric-value tabular-nums">${m.last_seen ? new Date(m.last_seen).toLocaleTimeString("vi-VN") : "—"}</span>
+        </div>
       </div>
     </div>`).join("");
 }
@@ -983,7 +991,7 @@ async function loadJobs() {
   const all = $("#allJobs").checked ? "?all=1" : "";
   const { jobs } = await api(`/jobs${all}`);
   if (request !== jobsRequest || token !== app.token) return;
-  jobsBody.innerHTML = jobs.map(jobRow).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:20px;">Chưa có phiên vẽ nào.</td></tr>`;
+  jobsBody.innerHTML = jobs.map(jobRow).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:28px;">Chưa có phiên vẽ nào.</td></tr>`;
 }
 
 $("#allJobs").onchange = () => loadJobs().catch((err) => toast(err.message, "err"));
@@ -1023,8 +1031,8 @@ function jobRow(j) {
     <td class="col-name"><button class="job-name" type="button" data-details="${j.id}">${esc(j.drawing_name)}</button></td>
     <td class="col-mach">${esc(j.machine_name)}</td>
     <td class="col-user">${esc(j.username)}</td>
-    <td class="col-status">${badge(j.status)}${jobNotice(j) ? `<br/><small>${esc(jobNotice(j))}</small>` : ""}</td>
-    <td class="col-progress"><div class="bar"><span style="width:${progress}%" class="${progress >= 100 ? "bar-complete" : ""}"></span></div><small class="tabular-nums">${progress}%</small></td>
+    <td class="col-status">${badge(j.status)}${jobNotice(j) ? `<span class="status-subnote">${esc(jobNotice(j))}</span>` : ""}</td>
+    <td class="col-progress"><div class="bar"><span style="width:${progress}%" class="${progress >= 100 ? "bar-complete" : ""}"></span></div><small class="tabular-nums progress-pct-label">${progress}%</small></td>
     <td class="col-time"><small class="tabular-nums">${formatDate(j.created_at)}</small></td>
     <td class="col-actions"><div class="job-actions">${actions}</div></td>
   </tr>`;
@@ -1079,20 +1087,20 @@ async function openJobDetails(id) {
         </div>
         <div class="job-meta-grid">
           <div class="job-meta-item">
-            <span class="meta-label">Máy vẽ:</span>
+            <span class="meta-label">Máy vẽ</span>
             <span class="meta-val">${esc(job.machine_name)}</span>
           </div>
           <div class="job-meta-item">
-            <span class="meta-label">Người gửi:</span>
+            <span class="meta-label">Người gửi</span>
             <span class="meta-val">${esc(job.username)}</span>
           </div>
           <div class="job-meta-item">
-            <span class="meta-label">Tạo lúc:</span>
+            <span class="meta-label">Tạo lúc</span>
             <span class="meta-val tabular-nums">${formatFullDateTime(job.created_at)}</span>
           </div>
         </div>
       </div>
-      ${jobNotice(job) ? `<p class="muted">${esc(jobNotice(job))}</p>` : ""}
+      ${jobNotice(job) ? `<p class="muted dialog-notice">${esc(jobNotice(job))}</p>` : ""}
       <div class="job-timeline-wrap">
         <h3 class="timeline-title">Nhật ký phiên</h3>
         ${events.length ? `
@@ -1160,18 +1168,18 @@ async function loadAdmin() {
   const [{ machines }, { users }, { jobs }] = await Promise.all([api("/admin/machines"), api("/admin/users"), api("/admin/queue")]);
   if (token !== app.token) return;
   $("#admMachines").innerHTML = machines.map((m) => `<tr>
-    <td><code>${esc(m.id)}</code></td><td>${esc(m.name)}</td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " (tắt)"}</td>
+    <td><code>${esc(m.id)}</code></td><td><strong>${esc(m.name)}</strong></td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " (tắt)"}</td>
     <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><code>${esc(m.token)}</code></td>
-    <td>${m.needs_inspection && m.online && m.state === "IDLE"
+    <td><div class="admin-row-actions">${m.needs_inspection && m.online && m.state === "IDLE"
           ? `<button class="small" data-m="${esc(m.id)}" data-a="inspection">Xác nhận đã kiểm tra giấy</button>` : ""}
         <button class="small ghost" data-m="${esc(m.id)}" data-a="home">Về gốc</button>
         <button class="small ghost" data-m="${esc(m.id)}" data-a="token">Đổi token</button>
-        <button class="small ${m.enabled ? "danger" : "ghost"}" data-m="${esc(m.id)}" data-a="toggle" data-en="${m.enabled}">${m.enabled ? "Tắt" : "Bật"}</button></td></tr>`).join("");
+        <button class="small ${m.enabled ? "danger" : "ghost"}" data-m="${esc(m.id)}" data-a="toggle" data-en="${m.enabled}">${m.enabled ? "Tắt" : "Bật"}</button></div></td></tr>`).join("");
   $("#admUsers").innerHTML = users.map((u) => `<tr>
-    <td class="tabular-nums">${u.id}</td><td>${esc(u.username)}</td><td><code>${u.role}</code></td><td>${u.locked ? badge("FAILED").replace("Lỗi", "Đã khóa") : badge("IDLE").replace("Sẵn sàng", "Hoạt động")}</td>
+    <td class="tabular-nums">${u.id}</td><td><strong>${esc(u.username)}</strong></td><td><code>${u.role}</code></td><td>${u.locked ? badge("FAILED").replace("Lỗi", "Đã khóa") : badge("IDLE").replace("Sẵn sàng", "Hoạt động")}</td>
     <td><button class="small ${u.locked ? "ghost" : "danger"}" data-u="${u.id}" data-locked="${u.locked}">${u.locked ? "Mở khóa" : "Khóa"}</button></td></tr>`).join("");
   $("#admQueue").innerHTML = jobs.map((j) => `<tr><td class="tabular-nums">${j.id}</td><td><code>${esc(j.machine_id)}</code></td><td>${esc(j.drawing_name)}</td><td>${esc(j.username)}</td><td>${badge(j.status)}</td></tr>`).join("")
-    || `<tr><td colspan="5" class="muted" style="text-align:center;padding:14px;">Hàng đợi toàn hệ thống đang trống.</td></tr>`;
+    || `<tr><td colspan="5" class="muted" style="text-align:center;padding:20px;">Hàng đợi toàn hệ thống đang trống.</td></tr>`;
 }
 
 $("#admMachines").addEventListener("click", async (e) => {
