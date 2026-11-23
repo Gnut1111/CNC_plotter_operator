@@ -109,7 +109,8 @@ const MODE_VI = { centerline: "Đường tâm", outline: "Đường viền", fil
 const METHOD_VI = { otsu: "Tự động (Otsu)", adaptive: "Thích nghi", fixed: "Thủ công" };
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 let file, original, originalUrl, preview, displayed, previewTimer, previewRequest, tuneRequest;
-let revision = 0, candidates = [], savedDrawingId, sentJob, activeJob = null, sending = false, showImage = false;
+const TUNE_LABELS = { fast: "Nhanh", detail: "Chi tiết" };
+let revision = 0, savedDrawingId, sentJob, activeJob = null, sending = false, showImage = false;
 
 function workArea() {
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
@@ -126,8 +127,10 @@ function readParams() {
     drawFeed: +form.drawFeed.value, travelFeed: +form.travelFeed.value,
     penUp: form.penUp.value.trim(), penDown: form.penDown.value.trim(),
   };
-  if (form.simplifyMm && form.simplifyMm.value !== "") p.simplifyMm = +form.simplifyMm.value;
-  if (form.hatchRatio && form.hatchRatio.value !== "") p.hatchRatio = +form.hatchRatio.value;
+  p.simplifyMm = form.simplifyMm.value ? +form.simplifyMm.value : null;
+  p.hatchRatio = +form.hatchRatio.value;
+  p.fillStrategy = form.fillStrategy.value;
+  p.rasterPx = form.rasterPx.value ? +form.rasterPx.value : null;
   return p;
 }
 
@@ -209,15 +212,18 @@ function syncActions() {
   $("#downloadBtn").disabled = !preview;
   $("#gcodeDetails").classList.toggle("hidden", !preview);
 
-  const canSend = Boolean(preview) && Boolean(app.selectedMachine) && !sending && !sentJob;
+  const canSend = Boolean(preview) && Boolean(app.selectedMachine) && !sending && !sentJob && !tuneRequest;
   $("#sendBtn").disabled = !canSend;
   $("#sendBtn").querySelector(".btn-text").textContent = sending ? "Đang gửi…" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
   $("#showSentJob").classList.toggle("hidden", !sentJob);
   form.inert = sending;
   fileInput.disabled = sending;
   if ($("#machineSelect")) $("#machineSelect").disabled = sending;
-  $("#autoBtn").disabled = !file || !form.checkValidity() || Boolean(tuneRequest);
-  $("#autoBtn").textContent = tuneRequest ? "Đang so sánh cấu hình…" : "Tìm cấu hình phù hợp";
+  $$("[data-tune]").forEach((button) => {
+    const profile = button.dataset.tune;
+    button.disabled = !file || !form.checkValidity() || Boolean(tuneRequest);
+    button.textContent = tuneRequest?.profile === profile ? "Đang tìm…" : TUNE_LABELS[profile];
+  });
 
   updateStepper();
   updateStepGuide();
@@ -273,20 +279,19 @@ $("#activeJobBar")?.addEventListener("click", async (e) => {
   }
 });
 
-function clearCandidates() {
-  tuneRequest?.abort();
+function clearTuneResult() {
+  tuneRequest?.controller.abort();
   tuneRequest = null;
-  candidates = [];
   $("#autoResult").replaceChildren();
 }
 
-function schedulePreview({ delay = 260, keepCandidates = false, keepImage = false } = {}) {
+function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = false } = {}) {
   const current = ++revision;
   clearTimeout(previewTimer);
   previewTimer = null;
   previewRequest?.abort();
   previewRequest = null;
-  if (!keepCandidates) clearCandidates();
+  if (!keepTuneResult) clearTuneResult();
   preview = null;
   if (!keepImage || !form.checkValidity()) displayed = null;
   savedDrawingId = null;
@@ -453,46 +458,55 @@ $("#retryPreview").onclick = () => schedulePreview({ delay: 0 });
 new ResizeObserver(drawPreview).observe(canvas.parentElement);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawPreview);
 
-$("#autoBtn").onclick = async () => {
+$$("[data-tune]").forEach((button) => {
+  button.onclick = () => tuneDrawing(button.dataset.tune);
+});
+
+async function tuneDrawing(profile) {
+  if (tuneRequest || sending) return;
   const controller = new AbortController();
-  tuneRequest = controller;
+  const request = { controller, profile };
+  tuneRequest = request;
   const panel = $("#autoResult");
-  panel.textContent = "Đang so sánh độ khớp và thời gian vẽ…";
+  panel.textContent = `Đang tìm cấu hình ${TUNE_LABELS[profile]}. Tối đa ${profile === "fast" ? 15 : 45} giây.`;
   syncActions();
   try {
+    const body = uploadData(readParams(), app.selectedMachine);
+    body.append("profile", profile);
     const result = await api("/drawings/auto", {
-      method: "POST", body: uploadData(readParams(), app.selectedMachine), signal: controller.signal,
+      method: "POST", body, signal: controller.signal,
     });
-    if (tuneRequest !== controller) return;
-    candidates = result.candidates;
-    panel.innerHTML = candidates.map((c, i) => `
-      <div class="cand">
-        <b>${esc(c.label)}</b>
-        <small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small>
-        <small>Độ khớp ${c.metrics.iou}% · khoảng ~${c.metrics.minutes} phút</small>
-        <button type="button" class="small ghost" data-cand="${i}">Áp dụng</button>
-      </div>`).join("");
+    if (tuneRequest !== request) return;
+    const [{ params, metrics }] = result.candidates;
+    form.detail.value = params.detail;
+    form.mode.value = params.mode;
+    form.smoothing.value = params.smoothing;
+    form.simplifyMm.value = params.simplifyMm ?? "";
+    form.hatchRatio.value = params.hatchRatio;
+    form.fillStrategy.value = params.fillStrategy;
+    form.rasterPx.value = params.rasterPx ?? "";
+    form.despeckle.checked = params.despeckle;
+    form.penUp.value = params.penUp;
+    form.penDown.value = params.penDown;
+    form.thresholdMode.value = params.threshold === "adaptive" ? "adaptive" : "manual";
+    if (params.threshold !== "adaptive") form.threshold.value = params.threshold;
+    form.invert.value = String(params.invert);
+    updateFormLabels();
+    showImage = false;
+    const number = (value) => value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+    panel.innerHTML = `<div class="cand">
+      <b>${TUNE_LABELS[profile]} · ${MODE_VI[params.mode]}</b>
+      <small>Trùng diện tích nét ${number(metrics.iou)}% · ước tính vẽ ${number(metrics.minutes)} phút</small>
+      <small>Tìm trong ${number(result.ms / 1000)} giây · kiểm tra kỹ ${result.verified}/${result.tried} cấu hình</small>
+      ${result.timeLimited ? "<small>Đã hết thời gian tìm. Dùng kết quả tốt nhất đã kiểm tra.</small>" : ""}
+    </div>`;
+    schedulePreview({ delay: 0, keepTuneResult: true, keepImage: true });
   } catch (err) {
-    if (tuneRequest === controller) panel.textContent = `Lỗi: ${err.message}`;
+    if (tuneRequest === request) panel.textContent = err.message;
   } finally {
-    if (tuneRequest === controller) { tuneRequest = null; syncActions(); }
+    if (tuneRequest === request) { tuneRequest = null; syncActions(); }
   }
-};
-
-$("#autoResult").addEventListener("click", (event) => {
-  const button = event.target.closest("button[data-cand]");
-  if (!button) return;
-  const { params } = candidates[+button.dataset.cand];
-  form.detail.value = params.detail;
-  form.mode.value = params.mode;
-  form.smoothing.value = params.smoothing;
-  form.thresholdMode.value = params.threshold === "adaptive" ? "adaptive" : "manual";
-  if (params.threshold !== "adaptive") form.threshold.value = params.threshold;
-  form.invert.value = String(params.invert);
-  updateFormLabels();
-  showImage = false;
-  schedulePreview({ delay: 0, keepCandidates: true, keepImage: true });
-});
+}
 
 $("#downloadBtn").onclick = () => {
   if (!preview) return;
@@ -505,7 +519,7 @@ $("#downloadBtn").onclick = () => {
 
 $("#showSentJob").onclick = () => showTab("jobs");
 $("#sendBtn").onclick = async () => {
-  if (sending || sentJob || !preview || !app.selectedMachine) return;
+  if (sending || tuneRequest || sentJob || !preview || !app.selectedMachine) return;
   const current = revision;
   const token = app.token;
   const machineId = app.selectedMachine;

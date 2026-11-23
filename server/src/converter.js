@@ -16,6 +16,8 @@ const DEFAULTS = {
   smoothing: 1, // 0..3 vòng làm mượt Chaikin
   simplifyMm: null, // null: theo mức chi tiết
   hatchRatio: 0.9, // khoảng gạch theo bề rộng bút
+  fillStrategy: "legacy",
+  rasterPx: null, // null: theo mức chi tiết
   despeckle: true, // xóa đốm nhiễu nhỏ
   penWidthMm: 0.5, // bề rộng nét bút — dùng cho khoảng cách tô gạch và chấm điểm
   travelFeed: 3000, // mm/phút
@@ -25,7 +27,9 @@ const DEFAULTS = {
 };
 
 const PEN_LIFT_SECONDS = 0.4; // thời gian ước lượng cho mỗi lần nhấc/hạ bút
-const EVAL_SIZE = 400; // độ phân giải ảnh tham chiếu khi chấm điểm
+const EVAL_SIZE = 400;
+const VERIFY_SIZE = 960;
+const TUNE_TIMEOUT_MS = { fast: 14500, detail: 44500, both: 44500 };
 
 function normalizeParams(input = {}, workArea) {
   const p = { ...DEFAULTS };
@@ -45,6 +49,9 @@ function normalizeParams(input = {}, workArea) {
   p.smoothing = Math.round(num(input.smoothing, 0, 3, DEFAULTS.smoothing));
   p.simplifyMm = num(input.simplifyMm, 0.03, 1, null);
   p.hatchRatio = num(input.hatchRatio, 0.6, 1, DEFAULTS.hatchRatio);
+  if (["inset-x", "inset-y"].includes(input.fillStrategy)) p.fillStrategy = input.fillStrategy;
+  p.rasterPx = num(input.rasterPx, 210, 1280, null);
+  if (p.rasterPx !== null) p.rasterPx = Math.round(p.rasterPx);
   p.despeckle = !(input.despeckle === false || input.despeckle === "false");
   p.penWidthMm = num(input.penWidthMm, 0.1, 3, DEFAULTS.penWidthMm);
   p.travelFeed = num(input.travelFeed, 100, 10000, DEFAULTS.travelFeed);
@@ -54,13 +61,13 @@ function normalizeParams(input = {}, workArea) {
   return p;
 }
 
-const maxSizeFor = (detail) => 150 + detail * 60; // 210..750 px
+const maxSizeFor = (p) => p.rasterPx ?? 150 + p.detail * 60;
 
-async function loadGray(buffer, maxSize) {
+async function loadGray(buffer, maxSize, enlarge = false) {
   const { data, info } = await sharp(buffer)
     .rotate()
     .flatten({ background: "#ffffff" })
-    .resize(maxSize, maxSize, { fit: "inside", withoutEnlargement: true })
+    .resize(maxSize, maxSize, { fit: "inside", withoutEnlargement: !enlarge })
     .greyscale()
     .raw()
     .toBuffer({ resolveWithObject: true });
@@ -433,10 +440,34 @@ function order(paths) {
   return out;
 }
 
+// Sweep only where the pen fits. Fall back to the skeleton in thin regions.
+function insetFill(bin, spacing, radius, vertical, cache) {
+  const { binary, width, height } = bin;
+  cache.wallDistance ??= distanceTransform(binary.map((v) => 1 - v), width, height);
+  const core = binary.map((v, i) => Number(v && cache.wallDistance[i] >= radius + 0.25));
+  cache.skeleton ??= thin(bin);
+  if (!core.some(Boolean)) return traceSkeleton(cache.skeleton);
+
+  const coreDistance = distanceTransform(core, width, height);
+  const thinOnly = cache.skeleton.binary.map((v, i) => Number(v && coreDistance[i] > Math.max(1, radius)));
+  const lines = traceSkeleton({ binary: thinOnly, width, height })
+    .concat(traceSkeleton(edges({ binary: core, width, height })));
+
+  if (!vertical) return lines.concat(hatch({ binary: core, width, height }, spacing).map((points) => ({ points, isHatch: true })));
+  const transposed = new Uint8Array(binary.length);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) transposed[x * height + y] = core[y * width + x];
+  return lines.concat(hatch({ binary: transposed, width: height, height: width }, spacing)
+    .map((points) => ({ points: points.map(({ x, y }) => ({ x: y, y: x })), isHatch: true })));
+}
+
 /** Trích đường nét (tọa độ pixel) theo kiểu nét */
-function pixelPaths(bin, mode, spacingPx) {
-  if (mode === "centerline") return traceSkeleton(thin(bin));
-  const outline = trace(edges(bin)).map((points) => ({ points }));
+function pixelPaths(cache, p, tf, spacingPx) {
+  const bin = cache.bin, mode = p.mode;
+  if (mode === "centerline") return traceSkeleton(cache.skeleton ??= thin(bin));
+  if (mode === "fill" && p.fillStrategy !== "legacy") {
+    return insetFill(bin, spacingPx, p.penWidthMm / (2 * tf.scale), p.fillStrategy === "inset-y", cache);
+  }
+  const outline = cache.outline ??= trace(edges(bin)).map((points) => ({ points }));
   if (mode !== "fill") return outline;
   return outline.concat(hatch(bin, spacingPx).map((points) => ({ points, isHatch: true })));
 }
@@ -582,10 +613,21 @@ function rasterize(paths, ref, tf, penWidthMm) {
       const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - rx)), x1 = Math.min(W - 1, Math.ceil(Math.max(a.x, b.x) + rx));
       const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - ry)), y1 = Math.min(H - 1, Math.ceil(Math.max(a.y, b.y) + ry));
       const dx = (b.x - a.x) * mmPerPx, dy = (b.y - a.y) * mmPerPy, L2 = dx * dx + dy * dy;
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        const ex = (x - a.x) * mmPerPx, ey = (y - a.y) * mmPerPy;
-        const t = L2 ? Math.max(0, Math.min(1, (ex * dx + ey * dy) / L2)) : 0;
-        if ((ex - t * dx) ** 2 + (ey - t * dy) ** 2 <= r * r) out[y * W + x] = 1;
+      for (let y = y0; y <= y1; y++) {
+        let start = x0, end = x1;
+        if (b.y !== a.y) {
+          const t0 = (y - ry - a.y) / (b.y - a.y), t1 = (y + ry - a.y) / (b.y - a.y);
+          const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(1, Math.max(t0, t1));
+          if (lo > hi) continue;
+          const xa = a.x + (b.x - a.x) * lo, xb = a.x + (b.x - a.x) * hi;
+          start = Math.max(start, Math.floor(Math.min(xa, xb) - rx));
+          end = Math.min(end, Math.ceil(Math.max(xa, xb) + rx));
+        }
+        for (let x = start; x <= end; x++) {
+          const ex = (x - a.x) * mmPerPx, ey = (y - a.y) * mmPerPy;
+          const t = L2 ? Math.max(0, Math.min(1, (ex * dx + ey * dy) / L2)) : 0;
+          if ((ex - t * dx) ** 2 + (ey - t * dy) ** 2 <= r * r) out[y * W + x] = 1;
+        }
       }
     }
   }
@@ -597,7 +639,7 @@ function rasterize(paths, ref, tf, penWidthMm) {
  * - chamferMm: trung bình 2 chiều (nét vẽ → mực gần nhất, mực → nét vẽ gần nhất), đơn vị mm. Càng nhỏ càng giống.
  * - iou: phần trăm trùng khớp diện tích nét.
  */
-function evaluate(paths, ref, tf, p, dInk) {
+function evaluate(paths, ref, tf, p, dInk, strict = false) {
   const { out: drawn, mmPerPx } = rasterize(paths, ref, tf, p.penWidthMm);
   const { binary: ink, width: W, height: H } = ref;
   let nInk = 0, nDrawn = 0, inter = 0;
@@ -605,11 +647,11 @@ function evaluate(paths, ref, tf, p, dInk) {
     nInk += ink[i]; nDrawn += drawn[i];
     if (ink[i] && drawn[i]) inter++;
   }
-  if (!nInk || !nDrawn) return { chamferMm: 99, iou: 0, extraMm: 99, missMm: 99, coverage: 0, precision: 0, score: 0 };
+  if (!nInk || !nDrawn) return { chamferMm: 99, iou: 0, extraMm: 99, missMm: 99, coverage: 0, precision: 0, inkRecall: 0, inkPrecision: 0, score: 0 };
   dInk ??= distanceTransform(ink, W, H);
   const dDrawn = distanceTransform(drawn, W, H);
   let extra = 0, miss = 0, covered = 0, precise = 0;
-  const tolerance = Math.max(1, p.penWidthMm / (2 * mmPerPx));
+  const tolerance = Math.max(1, (strict ? Math.min(0.20, p.penWidthMm / 2) : p.penWidthMm / 2) / mmPerPx);
   for (let i = 0; i < ink.length; i++) {
     if (drawn[i]) { extra += dInk[i]; if (dInk[i] <= tolerance) precise++; }
     if (ink[i]) { miss += dDrawn[i]; if (dDrawn[i] <= tolerance) covered++; }
@@ -622,7 +664,8 @@ function evaluate(paths, ref, tf, p, dInk) {
   const iou = inter / (nInk + nDrawn - inter);
   return {
     coverage: r2(100 * coverage), precision: r2(100 * precision),
-    score: r2(100 * (0.6 * iou + 0.4 * f1)),
+    inkRecall: r2(100 * inter / nInk), inkPrecision: r2(100 * inter / nDrawn),
+    score: r2(100 * (strict ? 0.8 * iou + 0.2 * f1 : 0.6 * iou + 0.4 * f1)),
     chamferMm: r2((extraMm + missMm) / 2),
     extraMm: r2(extraMm),
     missMm: r2(missMm),
@@ -691,10 +734,48 @@ function buildFromGray(gray, p, workArea, cache = {}) {
   }
   cache.px ??= {};
   const spacingPx = Math.max(0.5, p.penWidthMm * p.hatchRatio / tf.scale);
-  const key = p.mode === "fill" ? `fill:${spacingPx}` : p.mode;
-  cache.px[key] ??= pixelPaths(cache.bin, p.mode, spacingPx);
+  const key = p.mode === "fill" ? `fill:${p.fillStrategy}:${spacingPx}` : p.mode;
+  cache.px[key] ??= pixelPaths(cache, p, tf, spacingPx);
   const paths = toMachinePaths(cache.px[key], tf, p, workArea);
   return { tf, paths, info: cache.info };
+}
+
+function readInkPaths(gcode, p) {
+  let current = { x: 0, y: 0 }, path;
+  const paths = [];
+  for (const raw of gcode.split("\n")) {
+    const line = raw.trim().toUpperCase();
+    if (line === p.penUp.trim().toUpperCase()) { path = null; continue; }
+    if (line === p.penDown.trim().toUpperCase()) { path = [current]; continue; }
+    const move = /^G([01]) X([\d.]+) Y([\d.]+)/.exec(line);
+    if (!move) continue;
+    const next = { x: +move[2], y: +move[3] };
+    if (move[1] === "1" && path && (next.x !== current.x || next.y !== current.y)) {
+      if (path.length === 1) paths.push(path);
+      path.push(next);
+    }
+    current = next;
+  }
+  return paths;
+}
+
+async function scoringReference(buffer, refParams) {
+  const coarse = await loadGray(buffer, EVAL_SIZE);
+  const source = sourceReference(coarse);
+  const gray = await loadGray(buffer, VERIFY_SIZE, true);
+  const { ref, info } = referenceMask(gray, refParams ?? source);
+  return { coarse, source, ref, info };
+}
+
+function scoreOutput(gcode, ref, p, workArea, dInk) {
+  const tf = transformFor(ref.width, ref.height, p, workArea);
+  return evaluate(readInkPaths(gcode, p), ref, tf, p, dInk, true);
+}
+
+// Use the same normalized footprint to compare saved G-code from different generators.
+async function assessGcode(buffer, gcode, input, workArea) {
+  const { ref } = await scoringReference(buffer);
+  return scoreOutput(gcode, ref, normalizeParams(input, workArea), workArea);
 }
 
 /**
@@ -704,18 +785,18 @@ function buildFromGray(gray, p, workArea, cache = {}) {
  */
 async function convert(buffer, input, workArea, { refParams } = {}) {
   const p = normalizeParams(input, workArea);
-  const gray = await loadGray(buffer, maxSizeFor(p.detail));
+  const gray = await loadGray(buffer, maxSizeFor(p));
   const { tf, paths, info } = buildFromGray(gray, p, workArea);
   // Các giá trị "auto" được thay bằng giá trị đã chọn để người dùng thấy và chạy lại được
   const used = { ...p, threshold: info.method === "adaptive" ? "adaptive" : info.level, invert: info.invert };
   // refParams: chấm điểm theo một ảnh tham chiếu cố định (để so sánh công bằng giữa các cấu hình)
-  const { ref } = referenceMask(await loadGray(buffer, EVAL_SIZE), refParams);
+  const { ref } = await scoringReference(buffer, refParams);
   const gcode = toGcode(paths, used);
   const stats = {
     paths: paths.length,
     lines: gcode.split("\n").length - 1,
     ...estimate(paths, used),
-    ...evaluate(paths, ref, tf, used),
+    ...scoreOutput(gcode, ref, used, workArea),
     binarize: info,
     imageSize: [gray.width, gray.height],
     bbox: [tf.offX, tf.offY, tf.offX + gray.width * tf.scale, tf.offY + gray.height * tf.scale].map((v) => Math.round(v * 10) / 10),
@@ -724,31 +805,36 @@ async function convert(buffer, input, workArea, { refParams } = {}) {
 }
 
 /** Search shape first, then refine the best candidates against the same ink mask. */
-async function autoTune(buffer, input, workArea) {
-  const start = performance.now(), deadline = start + 7500;
+async function autoTune(buffer, input, workArea, profile = "both", onVerified) {
+  if (!["fast", "detail", "both"].includes(profile)) throw new Error("Chế độ tìm cấu hình không hợp lệ.");
+  const start = performance.now();
+  const quick = profile === "fast";
+  const searchUntil = start + (quick ? 9500 : 32500);
+  const verifyUntil = start + (quick ? 13000 : 41500);
+  let timeLimited = false;
   const base = normalizeParams(input, workArea);
   if (!/^M5$/i.test(base.penUp.trim()) || !/^M3 S(?:\d{1,2}|1[0-7]\d|180)$/i.test(base.penDown.trim())) {
     throw new Error("Tìm cấu hình cần lệnh nâng M5 và lệnh hạ M3 S0–180 theo giao thức máy.");
   }
 
-  const evalGray = await loadGray(buffer, EVAL_SIZE);
-  const source = sourceReference(evalGray);
+  const { coarse: evalGray, source, ref: verifyRef } = await scoringReference(buffer);
   const { ref, info } = referenceMask(evalGray, source);
   const results = [], visited = new Set(), grays = new Map(), caches = new Map();
   const reply = (candidates) => ({
     candidates, reference: info, tried: visited.size, ms: Math.round(performance.now() - start),
-    timeLimited: performance.now() >= deadline,
+    verified: candidates.length ? verifiedCount : 0, timeLimited,
   });
-  if (!ref.binary.some(Boolean)) return reply([]);
+  let verifiedCount = 0;
+  if (!ref.binary.some(Boolean) && !verifyRef.binary.some(Boolean)) return reply([]);
   const dInk = distanceTransform(ref.binary, ref.width, ref.height);
-  const fixed = { ...base, ...source, penUp: base.penUp.trim().toUpperCase(), penDown: base.penDown.trim().toUpperCase() };
+  const fixed = { ...base, ...source, fillStrategy: "legacy", rasterPx: null, penUp: base.penUp.trim().toUpperCase(), penDown: base.penDown.trim().toUpperCase() };
 
   async function tryPlan(params) {
-    if (performance.now() >= deadline) return;
+    if (performance.now() >= searchUntil) { timeLimited = true; return; }
     const key = JSON.stringify(params);
     if (visited.has(key)) return;
     visited.add(key);
-    const size = maxSizeFor(params.detail);
+    const size = maxSizeFor(params);
     if (!grays.has(size)) grays.set(size, await loadGray(buffer, size));
     const group = [size, params.threshold, params.invert, params.despeckle].join("/");
     const cache = caches.get(group) || {};
@@ -758,11 +844,11 @@ async function autoTune(buffer, input, workArea) {
     const { paths, tf } = buildFromGray(grays.get(size), params, workArea, cache);
     if (!paths.length) return;
     const metrics = evaluate(paths, ref, tf, params, dInk);
-    if (!metrics.score) return;
     results.push({ params, metrics: { paths: paths.length, ...metrics, ...estimate(paths, params) } });
   }
 
   const modes = ["centerline", "outline", "fill"];
+  await tryPlan({ ...fixed, mode: base.mode, fillStrategy: base.fillStrategy, rasterPx: base.rasterPx });
   for (const detail of [5, 3, 7, 9]) {
     for (const mode of modes) {
       for (const smoothing of [1, 0, 2]) {
@@ -801,15 +887,89 @@ async function autoTune(buffer, input, workArea) {
     }
   }
 
-  if (!results.length) return reply([]);
-  const detailed = results.sort(rank)[0];
-  const fast = results.filter(({ metrics: m }) => m.score >= detailed.metrics.score - 6
-    && m.coverage >= detailed.metrics.coverage - 8 && m.precision >= detailed.metrics.precision - 8)
+  const legacy = results.filter(({ params }) => params.fillStrategy === "legacy").sort(rank);
+  const legacyLeader = legacy[0];
+  const legacyFast = legacyLeader && legacy.filter(({ metrics: m }) => m.score >= legacyLeader.metrics.score - 6
+    && m.coverage >= legacyLeader.metrics.coverage - 8 && m.precision >= legacyLeader.metrics.precision - 8)
     .sort((a, b) => a.metrics.seconds - b.metrics.seconds || rank(a, b))[0];
-  return reply([
-    { id: "detail", label: "Chi tiết", ...detailed },
-    { id: "fast", label: "Nhanh", ...fast },
-  ]);
+  // Preserve the current search as a seed, then try additional pen-aware raster variants.
+  const seedModes = modes.map((mode) => results.filter((r) => r.params.mode === mode).sort(rank)[0]).filter(Boolean);
+  const fillSeed = seedModes.find(({ params }) => params.mode === "fill");
+  if (fillSeed) {
+    for (const fillStrategy of ["inset-x", "inset-y"]) {
+      for (const detail of [4, 7, 10]) {
+        for (const hatchRatio of [0.65, 0.85, 1]) {
+          await tryPlan({ ...fillSeed.params, fillStrategy, detail, hatchRatio });
+        }
+      }
+    }
+  }
+  if (!quick) {
+    const leaders = [...seedModes, ...results.filter(({ params }) => params.fillStrategy !== "legacy").sort(rank).slice(0, 2)];
+    for (const { params: p } of leaders) {
+      for (const rasterPx of [900, 1120, 1280]) {
+        for (const simplifyMm of [0.06, 0.15, 0.35]) await tryPlan({ ...p, rasterPx, simplifyMm });
+      }
+      if (typeof p.threshold === "number") {
+        for (const delta of [-8, 8, 24]) {
+          for (const smoothing of [0, 1, 2]) {
+            await tryPlan({ ...p, threshold: Math.max(1, Math.min(254, p.threshold + delta)), smoothing });
+          }
+        }
+      }
+    }
+  }
+
+  if (!results.length) return reply([]);
+  // Re-rank distinct geometry families and a few shorter routes on the same 960px mask.
+  const finalists = new Set();
+  const byOverlap = (a, b) => b.metrics.iou - a.metrics.iou || rank(a, b);
+  const byTime = (a, b) => a.metrics.seconds - b.metrics.seconds || byOverlap(a, b);
+  const byScore = results.sort(rank);
+  const topScore = byScore[0].metrics.score;
+  if (legacyLeader) finalists.add(legacyLeader);
+  if (legacyFast) finalists.add(legacyFast);
+  finalists.add(byScore[0]);
+  finalists.add(byScore.filter((r) => r.metrics.score >= topScore - 6
+    && r.metrics.coverage >= byScore[0].metrics.coverage - 8
+    && r.metrics.precision >= byScore[0].metrics.precision - 8).sort(byTime)[0]);
+  const overlaps = [...results].sort(byOverlap);
+  for (const r of overlaps.slice(0, quick ? 6 : 14)) finalists.add(r);
+  for (const mode of modes) {
+    for (const r of overlaps.filter(({ params }) => params.mode === mode).slice(0, quick ? 2 : 4)) finalists.add(r);
+  }
+  for (const r of overlaps.filter(({ params }) => params.fillStrategy !== "legacy").slice(0, quick ? 2 : 5)) finalists.add(r);
+  for (const r of [...results].filter(({ metrics }) => metrics.score >= topScore - 8).sort(byTime).slice(0, quick ? 4 : 8)) finalists.add(r);
+
+  const verified = [];
+  let recallFloor = 0;
+  function choices() {
+    if (!verified.length) return [];
+    const eligible = verified.filter(({ metrics }) => metrics.inkRecall >= recallFloor);
+    const detailed = eligible.sort(byOverlap)[0];
+    const fast = eligible.filter(({ metrics: m }) => m.iou >= detailed.metrics.iou - 4
+      && m.score >= detailed.metrics.score - 5 && m.inkRecall >= detailed.metrics.inkRecall - 5
+      && m.inkPrecision >= detailed.metrics.inkPrecision - 5).sort(byTime)[0];
+    const result = [];
+    if (profile !== "fast") result.push({ id: "detail", label: "Chi tiết", ...detailed });
+    if (profile !== "detail") result.push({ id: "fast", label: "Nhanh", ...fast });
+    return result;
+  }
+  const highDistances = distanceTransform(verifyRef.binary, verifyRef.width, verifyRef.height);
+  for (const { params, metrics } of finalists) {
+    if (verified.length && performance.now() >= verifyUntil) { timeLimited = true; break; }
+    const gray = grays.get(maxSizeFor(params));
+    const { paths } = buildFromGray(gray, params, workArea);
+    const gcode = toGcode(paths, params);
+    const finalMetrics = scoreOutput(gcode, verifyRef, params, workArea, highDistances);
+    if (finalMetrics.score) {
+      if (params === legacyLeader?.params) recallFloor = Math.max(0, finalMetrics.inkRecall - 6);
+      verified.push({ params, metrics: { ...metrics, ...finalMetrics } });
+      verifiedCount++;
+      if (verifiedCount === 1 || verifiedCount % 4 === 0) onVerified?.(reply(choices()));
+    }
+  }
+  return reply(choices());
 }
 
-module.exports = { convert, autoTune, normalizeParams, DEFAULTS };
+module.exports = { convert, autoTune, assessGcode, normalizeParams, DEFAULTS, TUNE_TIMEOUT_MS };

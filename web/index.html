@@ -207,9 +207,12 @@
                     </label>
                   </div>
 
-                  <!-- Auto-tune button -->
+                  <!-- Auto-tune -->
                   <div class="auto-tune-box">
-                    <button type="button" id="autoBtn" class="auto-btn ghost" disabled>Tìm cấu hình phù hợp</button>
+                    <div class="form-row" role="group" aria-label="Tìm cấu hình phù hợp">
+                      <button type="button" class="auto-btn ghost" data-tune="fast" disabled>Nhanh</button>
+                      <button type="button" class="auto-btn ghost" data-tune="detail" disabled>Chi tiết</button>
+                    </div>
                     <div id="autoResult" class="auto-result" aria-live="polite"></div>
                   </div>
 
@@ -242,6 +245,26 @@
                             <option value="false">Không</option>
                             <option value="true">Có</option>
                           </select>
+                        </label>
+                      </div>
+                      <div class="form-row">
+                        <label>Dung sai giản lược (mm)
+                          <input type="number" name="simplifyMm" placeholder="Tự động" min="0.03" max="1" step="0.01" />
+                        </label>
+                        <label>Bước gạch / nét bút
+                          <input type="number" name="hatchRatio" value="0.9" min="0.6" max="1" step="0.01" required />
+                        </label>
+                      </div>
+                      <div class="form-row">
+                        <label>Cách tô
+                          <select name="fillStrategy">
+                            <option value="legacy">Viền và gạch</option>
+                            <option value="inset-x">Tô gạch ngang sát mép trong</option>
+                            <option value="inset-y">Tô gạch dọc sát mép trong</option>
+                          </select>
+                        </label>
+                        <label>Độ phân giải dò nét (px)
+                          <input type="number" name="rasterPx" placeholder="Tự động" min="210" max="1280" />
                         </label>
                       </div>
                       <label>Bề rộng nét bút (mm)

@@ -60,7 +60,7 @@ async function processUpload(req, res, fn) {
 
 // Tự dò tham số: trả về các phương án (không lưu bản vẽ)
 router.post("/drawings/auto", upload.single("image"), wrap(async (req, res) => {
-  const result = await processUpload(req, res, (image, params, area) => tuneInWorker(image, params, area, res));
+  const result = await processUpload(req, res, (image, params, area) => tuneInWorker(image, params, area, res, req.body.profile ?? "both"));
   if (!result) return;
   if (!result.candidates.length) return res.status(422).json({ error: "Không tìm thấy nét vẽ nào trong ảnh" });
   res.json(result);

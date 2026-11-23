@@ -3,7 +3,7 @@ const test = require("node:test");
 const { readFile } = require("node:fs/promises");
 const { join } = require("node:path");
 const sharp = require("sharp");
-const { autoTune, convert } = require("../src/converter");
+const { autoTune, convert, assessGcode } = require("../src/converter");
 
 const area = { width: 120, height: 80 };
 
@@ -13,9 +13,9 @@ test("auto-tune ranks two reproducible setups while preserving machine settings"
   const result = await autoTune(image, machine, area);
   assert.deepEqual(result.candidates.map((candidate) => candidate.id), ["detail", "fast"]);
   const [detailed, fast] = result.candidates.map((candidate) => candidate.metrics);
-  assert.ok(result.tried > 36);
-  assert.ok(detailed.score >= fast.score && detailed.score - fast.score <= 6);
-  assert.ok(detailed.coverage - fast.coverage <= 8 && detailed.precision - fast.precision <= 8);
+  assert.ok(result.tried > 36 && result.verified > 1);
+  assert.ok(detailed.iou >= fast.iou && detailed.iou - fast.iou <= 4.001);
+  assert.ok(detailed.inkRecall - fast.inkRecall <= 5.001 && detailed.inkPrecision - fast.inkPrecision <= 5.001);
   assert.ok(fast.seconds <= detailed.seconds);
 
   for (const candidate of result.candidates) {
@@ -66,4 +66,24 @@ test("a crossing keeps the same four arms in two pen-down trails", async () => {
   assert.ok(distances.every((d) => d <= 1), "a pen-down move left the crossing axes");
   // The mask contains 2 × 80px of stroke, or about 128mm at the selected scale.
   assert.ok(stats.drawLengthMm >= 120 && stats.drawLengthMm <= 130);
+});
+
+test("strict score detects spilled ink that is close to the original", async () => {
+  const image = await sharp(Buffer.from(`<svg width="100" height="100">
+    <rect width="100" height="100" fill="white"/>
+    <path d="M10 50h80" stroke="black" stroke-width="0.7"/>
+  </svg>`)).png().toBuffer();
+  const gcode = (y) => `M5\nG0 X30 Y${y}\nM3 S90\nG1 X90 Y${y} F1500\nM5\n`;
+  const exact = await assessGcode(image, gcode(40), { penWidthMm: 0.5 }, area);
+  const shifted = await assessGcode(image, gcode(40.25), { penWidthMm: 0.5 }, area);
+  assert.ok(exact.iou > shifted.iou + 10);
+  assert.ok(exact.inkPrecision > shifted.inkPrecision);
+  assert.ok(exact.score > shifted.score);
+});
+
+test("the fast profile only returns its own verified result", async () => {
+  const image = await readFile(join(__dirname, "../../docs/samples/lineart.png"));
+  const result = await autoTune(image, {}, area, "fast");
+  assert.deepEqual(result.candidates.map(({ id }) => id), ["fast"]);
+  assert.ok(result.verified > 0 && result.tried > result.verified);
 });
