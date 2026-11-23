@@ -5,3 +5,5 @@ server/data/
 .DS_Store
 firmware/**/secrets.h
 firmware/**/.pio/
+
+*.bak

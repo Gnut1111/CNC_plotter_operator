@@ -5,6 +5,11 @@ import { paintPreview, playbackPosition, readMoves } from "./preview.js";
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const machineLabel = (name) => {
+  const clean = String(name || "").trim();
+  if (!clean) return "máy vẽ";
+  return /^máy\b/i.test(clean) ? clean : `Máy ${clean}`;
+};
 
 const STATUS_VI = {
   QUEUED: "Hàng đợi", SENDING: "Đang truyền", READY: "Sẵn sàng", DRAWING: "Đang vẽ", PAUSED: "Tạm dừng",
@@ -170,6 +175,7 @@ function logout() {
   app.machines = [];
   app.selectedMachine = null;
   $("#machinePick").replaceChildren();
+  $("#machineInfo")?.replaceChildren();
   $("#allJobs").checked = false;
   $("#jobDetails").close();
   $("#jobRows").replaceChildren();
@@ -188,7 +194,7 @@ function enterApp() {
   stopShowcaseCycle();
   $("#loginView").classList.add("hidden");
   $("#appView").classList.remove("hidden");
-  $("#whoami").textContent = `${app.user.username} (${app.user.role === "admin" ? "Quản trị" : "Người dùng"})`;
+  $("#whoami").textContent = app.user.username;
   const avatar = $("#userAvatar");
   if (avatar) avatar.textContent = (app.user.username || "U")[0].toUpperCase();
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", app.user.role !== "admin"));
@@ -407,51 +413,67 @@ function drawPreview() {
   }
   const hasFile = Boolean(file);
   const emptyEl = $("#emptyPreview");
+  const zone = $("#dropZone");
   if (emptyEl) {
     emptyEl.hidden = hasFile;
     emptyEl.classList.toggle("hidden", hasFile);
   }
+  if (zone) {
+    zone.classList.toggle("is-empty", !hasFile);
+  }
 }
 
 function updateStepper() {
-  const s1 = $("#stepIndicator1"), s2 = $("#stepIndicator2"), s3 = $("#stepIndicator3"), s4 = $("#stepIndicator4");
-  if (!s1) return;
-  [s1, s2, s3, s4].forEach((s) => s.classList.remove("active"));
-  if (sentJob || pendingSend || (!file && activeJob)) {
-    s4.classList.add("active");
-  } else if (preview && app.selectedMachine) {
-    s3.classList.add("active");
-  } else if (file) {
-    s2.classList.add("active");
-  } else {
-    s1.classList.add("active");
-  }
+  const steps = [$("#stepIndicator1"), $("#stepIndicator2"), $("#stepIndicator3"), $("#stepIndicator4")];
+  if (!steps[0]) return;
+  let activeIdx = 0;
+  if (sentJob || pendingSend || (!file && activeJob)) activeIdx = 3;
+  else if (preview && app.selectedMachine) activeIdx = 2;
+  else if (file) activeIdx = 1;
+
+  steps.forEach((el, idx) => {
+    el.classList.toggle("active", idx === activeIdx);
+    el.classList.toggle("done", idx < activeIdx);
+  });
 }
 
 function updateStepGuide() {
   const guideText = $("#guideText");
   const nextStepGuide = $("#nextStepGuide");
-  if (!guideText) return;
+  if (!guideText || !nextStepGuide) return;
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
 
+  nextStepGuide.classList.remove("guide-warn", "guide-subtle");
+
   if (sentJob || pendingSend || sending) {
-    if (nextStepGuide) nextStepGuide.hidden = true;
+    nextStepGuide.hidden = true;
     return;
   }
-  if (nextStepGuide) nextStepGuide.hidden = false;
 
+  // Only show the guide bar when there is genuinely helpful context or a warning (no noise when ready & online!)
   if (!file) {
+    nextStepGuide.hidden = false;
+    nextStepGuide.classList.add("guide-subtle");
     guideText.textContent = "Bước 1: Chọn ảnh PNG hoặc JPG để bắt đầu.";
   } else if (previewRequest || previewTimer) {
-    guideText.textContent = "Bước 2: Đang tạo bản xem trước nét vẽ...";
+    nextStepGuide.hidden = false;
+    nextStepGuide.classList.add("guide-subtle");
+    guideText.textContent = "Đang tạo bản xem trước đường vẽ…";
   } else if (!preview) {
-    guideText.textContent = "Chưa tạo được bản xem trước. Hãy đổi thông số hoặc chọn ảnh khác.";
+    nextStepGuide.hidden = false;
+    nextStepGuide.classList.add("guide-warn");
+    guideText.textContent = "Chưa có bản xem trước hợp lệ. Hãy kiểm tra lại thông số hoặc ảnh.";
   } else if (!app.selectedMachine) {
-    guideText.textContent = "Bước 3: Chọn máy vẽ trong danh sách trên.";
-  } else if (machine && !machine.online) {
-    guideText.textContent = `Máy ${machine.name} đang mất kết nối. Lệnh gửi sẽ nằm trong hàng đợi.`;
+    nextStepGuide.hidden = false;
+    nextStepGuide.classList.add("guide-subtle");
+    guideText.textContent = "Chọn máy vẽ ở danh sách trên để gửi.";
+  } else if (machine && (!machine.online || machine.needs_inspection || machine.state === "WAIT_PAPER")) {
+    nextStepGuide.hidden = false;
+    nextStepGuide.classList.add("guide-warn");
+    guideText.textContent = !machine.online ? "Bản vẽ sẽ chờ máy kết nối." :
+      machine.needs_inspection ? "Bản vẽ sẽ chờ người tại máy kiểm tra giấy." : "Bản vẽ sẽ chờ đặt giấy.";
   } else {
-    guideText.textContent = `Sẵn sàng gửi bản vẽ tới ${machine?.name || "máy"}.`;
+    nextStepGuide.hidden = true;
   }
 }
 
@@ -463,7 +485,6 @@ function syncActions() {
     $("#" + id).setAttribute("aria-pressed", String(!playback.open && view === mode));
   }
   $("#showTravel").disabled = view !== "paths" || !displayed;
-  $("#compareLegend").hidden = view !== "compare" || !displayed;
   $("#simulateBtn").disabled = !playback.open && (!preview?.moves.distance || Boolean(tuneRequest) || sending);
   $("#simulateBtn").setAttribute("aria-expanded", String(playback.open));
   $("#simulateBtn").textContent = playback.open ? "Đóng mô phỏng" : "Mô phỏng";
@@ -484,13 +505,16 @@ function syncActions() {
   $("#discardDraft").disabled = sending || Boolean(pendingSend);
   if ($("#machineSelect")) $("#machineSelect").disabled = sending || Boolean(pendingSend);
   if ($("#autoBtn")) {
+    const autoRunning = tuneRequest?.profile === "both";
     $("#autoBtn").disabled = !file || !form.checkValidity() || Boolean(tuneRequest) || Boolean(pendingSend);
-    $("#autoBtn").textContent = tuneRequest?.profile === "both" ? "Đang tìm…" : "Gợi ý cấu hình";
+    $("#autoBtn").classList.toggle("is-loading", autoRunning);
+    const labelSpan = $("#autoBtn .auto-cta-text");
+    if (labelSpan) labelSpan.textContent = autoRunning ? "Đang tìm cấu hình…" : "Gợi ý cấu hình";
   }
   $$("[data-tune]").forEach((button) => {
     const profile = button.dataset.tune;
     button.disabled = !file || !form.checkValidity() || Boolean(tuneRequest) || Boolean(pendingSend);
-    button.textContent = tuneRequest?.profile === profile ? "Đang tìm…" : TUNE_LABELS[profile];
+    button.textContent = tuneRequest?.profile === profile ? "Đang dò…" : TUNE_LABELS[profile];
   });
 
   updateStepper();
@@ -507,7 +531,7 @@ function renderActiveJobBar() {
     return;
   }
   bar.classList.remove("hidden");
-  $("#activeJobTitle").textContent = `Phiên #${current.id}: ${current.drawing_name || "Bản vẽ"} (${current.machine_name || current.machine_id})`;
+  $("#activeJobTitle").textContent = `Phiên #${current.id}: ${current.drawing_name || "Bản vẽ"} · ${current.machine_name || current.machine_id}`;
   $("#activeJobBadge").innerHTML = badge(current.cancel_requested ? "CANCEL_REQUESTED" : current.status);
   const notice = jobNotice(current);
   $("#activeJobNotice").textContent = [
@@ -590,7 +614,6 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
     sentJob = null;
   }
   $("#stats").textContent = "";
-  $("#printHint").hidden = true;
   $("#gcodeText").textContent = "";
   $("#gcodeDetails").open = false;
   if (!pendingSend) $("#sendMsg").textContent = "";
@@ -601,7 +624,7 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
   saveDraft();
   if (!form.checkValidity()) {
     const invalid = form.querySelector(":invalid");
-    const label = invalid?.labels?.[0]?.childNodes[0]?.textContent.trim() || "Thông số";
+    const label = invalid?.dataset?.label || invalid?.labels?.[0]?.childNodes[0]?.textContent.trim() || "Thông số";
     const problem = invalid?.validity.rangeUnderflow ? `nhập từ ${invalid.min} trở lên.`
       : invalid?.validity.rangeOverflow ? `nhập tối đa ${invalid.max}.`
       : invalid?.validity.stepMismatch ? `nhập theo bước ${invalid.step}.`
@@ -634,8 +657,6 @@ async function runPreview(current) {
       `${s.paths} nét`, `ước tính ~${s.minutes} phút`, `độ khớp mô phỏng ${s.iou}%`,
       `tách nét: ${METHOD_VI[s.binarize.method] || s.binarize.method}`,
     ].join(" · ");
-    $("#printHint").textContent = `Mô phỏng dùng bề rộng nét ${result.params.penWidthMm} mm. Hãy xem So nét ở kích thước đã chọn và thử trên giấy nếu có nét mảnh sát nhau.`;
-    $("#printHint").hidden = false;
     $("#gcodeText").textContent = result.gcode.length > 200000 ? result.gcode.slice(0, 200000) + "\n…" : result.gcode;
     $("#convertMsg").textContent = "Bản xem trước sẵn sàng.";
     drawPreview();
@@ -673,6 +694,10 @@ function updateFormLabels() {
   $("#detailVal").textContent = form.detail.value;
   $("#thresholdVal").textContent = form.threshold.value;
   $("#thresholdRow").classList.toggle("hidden", form.thresholdMode.value !== "manual");
+  const isFill = form.mode.value === "fill";
+  $("#fillAdvancedGroup")?.classList.toggle("adv-inactive", !isFill);
+  const fillNote = $("#fillModeNote");
+  if (fillNote) fillNote.hidden = isFill;
   updateSliderTrack(form.detail);
   updateSliderTrack(form.threshold);
 }
@@ -734,9 +759,18 @@ fileInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") fileInput.click();
 });
 
-// Drag & drop support on viewport
+// Drag & drop + click-to-upload when empty
 const dropZone = $("#dropZone");
 if (dropZone) {
+  dropZone.addEventListener("click", () => {
+    if (!file && !sending && !pendingSend) fileInput.click();
+  });
+  dropZone.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && !file && !sending && !pendingSend) {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
   dropZone.addEventListener("dragover", (e) => {
     e.preventDefault();
     dropZone.classList.add("dragover");
@@ -751,6 +785,20 @@ if (dropZone) {
     if (droppedFile && !pendingSend) {
       handleSelectedFile(droppedFile);
     }
+  });
+}
+
+// Smooth scroll inside settingsCard when Advanced Options expands
+const advancedDetails = $("#advancedOptions");
+if (advancedDetails) {
+  advancedDetails.addEventListener("toggle", () => {
+    if (!advancedDetails.open) return;
+    const scroller = $("#settingsCard");
+    if (!scroller) return;
+    requestAnimationFrame(() => {
+      const targetTop = advancedDetails.offsetTop - 12;
+      scroller.scrollTo({ top: targetTop, behavior: "smooth" });
+    });
   });
 }
 
@@ -807,15 +855,39 @@ if ($("#autoBtn")) {
   $("#autoBtn").onclick = () => tuneDrawing("both");
 }
 
+function renderTuneSkeleton(profile) {
+  const card = (title, sub) => `
+    <div class="cand cand-loading">
+      <div class="cand-top">
+        <strong>${title}</strong>
+        <span class="cand-spinner-pill"><span class="mini-spin" aria-hidden="true"></span>Đang chạy</span>
+      </div>
+      <div class="cand-skeleton-lines" aria-hidden="true">
+        <span class="skel-bar skel-w80"></span>
+        <span class="skel-bar skel-w60"></span>
+      </div>
+      <div class="cand-loading-sub muted">${sub}</div>
+    </div>`;
+
+  if (profile === "both") {
+    return `<div class="cand-grid">
+      ${card("Chi tiết", "Tối ưu độ trùng nét")}
+      ${card("Nhanh", "Tối ưu tốc độ vẽ")}
+    </div>`;
+  }
+  return card(
+    TUNE_LABELS[profile],
+    `Đang dò cấu hình · tối đa ${profile === "fast" ? 15 : 45} giây`,
+  );
+}
+
 async function tuneDrawing(profile) {
   if (tuneRequest || sending || pendingSend) return;
   const controller = new AbortController();
   const request = { controller, profile };
   tuneRequest = request;
   const panel = $("#autoResult");
-  panel.textContent = profile === "both"
-    ? "Đang so sánh độ khớp và thời gian vẽ…"
-    : `Đang tìm cấu hình ${TUNE_LABELS[profile]}. Tối đa ${profile === "fast" ? 15 : 45} giây.`;
+  panel.innerHTML = renderTuneSkeleton(profile);
   syncActions();
   try {
     const body = uploadData(readParams(), app.selectedMachine);
@@ -825,23 +897,24 @@ async function tuneDrawing(profile) {
     });
     if (tuneRequest !== request) return;
     candidates = result.candidates || [];
+    const fmt = (val) => Number(val).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
     if (profile === "both") {
-      const elapsed = (result.ms / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+      const elapsed = fmt(result.ms / 1000);
       const same = candidates.length === 2 && JSON.stringify(candidates[0].params) === JSON.stringify(candidates[1].params);
-      panel.innerHTML = `<div class="auto-result-summary"><small class="muted">Đã thử ${result.tried} cấu hình trong ${elapsed} giây.${result.timeLimited ? " Đã hết thời gian." : ""}</small>`
-        + (same ? '<small class="muted">Hai lựa chọn cho cùng cấu hình ở ảnh này.</small>' : "")
+      panel.innerHTML = `<div class="auto-result-summary"><small class="muted">Đã đánh giá ${result.tried} cấu hình trong ${elapsed} giây.${result.timeLimited ? " Đã chọn phương án tốt nhất." : ""}</small>`
+        + (same ? '<small class="muted">Hai phương án cho cùng thông số với ảnh này.</small>' : "")
         + `</div><div class="cand-grid">`
         + candidates.map((c, i) => `
-          <div class="cand">
+          <div class="cand cand-reveal" style="animation-delay:${i * 90}ms">
             <div class="cand-top">
               <strong>${esc(c.label)}</strong>
-              <span class="cand-match tabular-nums">${c.metrics.iou}%</span>
+              <span class="cand-match tabular-nums">${fmt(c.metrics.iou)}%</span>
             </div>
             <div class="cand-info">
               <small class="muted">${MODE_VI[c.params.mode]} · Mức ${c.params.detail}</small>
-              <small class="muted tabular-nums">~${c.metrics.minutes.toLocaleString("vi-VN")} phút · ${c.metrics.paths} nét</small>
+              <small class="muted tabular-nums">~${fmt(c.metrics.minutes)} phút · ${Number(c.metrics.paths).toLocaleString("vi-VN")} nét</small>
             </div>
-            <button type="button" class="small cand-apply-btn" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
+            <button type="button" class="small cand-apply-btn" data-cand="${i}" aria-pressed="false" aria-label="Xác nhận cấu hình ${esc(c.label)}">Xác nhận</button>
           </div>`).join("")
         + `</div>`;
     } else {
@@ -849,17 +922,20 @@ async function tuneDrawing(profile) {
       if (!candidate) { panel.textContent = "Chưa tìm được nét phù hợp. Kiểm tra ảnh gốc hoặc đổi ảnh."; return; }
       const { params, metrics } = candidate;
       applyParams(params);
-      const number = (value) => value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
-      panel.innerHTML = `<div class="cand">
-        <b>${TUNE_LABELS[profile]} · ${MODE_VI[params.mode]}</b>
-        <small>Trùng nét mô phỏng ${number(metrics.iou)}% · ước tính vẽ ${number(metrics.minutes)} phút</small>
-        <small>Tìm trong ${number(result.ms / 1000)} giây · kiểm tra kỹ ${result.verified}/${result.tried} cấu hình</small>
-        ${result.timeLimited ? "<small>Đã hết thời gian tìm. Dùng kết quả tốt nhất đã kiểm tra.</small>" : ""}
+      panel.innerHTML = `<div class="cand cand-selected cand-reveal">
+        <div class="cand-top">
+          <strong>${TUNE_LABELS[profile]} · ${MODE_VI[params.mode]}</strong>
+          <span class="cand-match tabular-nums">${fmt(metrics.iou)}%</span>
+        </div>
+        <div class="cand-info">
+          <small class="muted tabular-nums">Ước tính ~${fmt(metrics.minutes)} phút · Đã áp dụng</small>
+          <small class="muted">Tìm trong ${fmt(result.ms / 1000)} giây · ${result.verified}/${result.tried} cấu hình đã kiểm tra${result.timeLimited ? " · Đã chọn tốt nhất" : ""}</small>
+        </div>
       </div>`;
       schedulePreview({ delay: 0, keepTuneResult: true, keepImage: true });
     }
   } catch (err) {
-    if (tuneRequest === request) panel.textContent = err.message;
+    if (tuneRequest === request) panel.innerHTML = `<p class="error">${esc(err.message)}</p>`;
   } finally {
     if (tuneRequest === request) { tuneRequest = null; syncActions(); }
   }
@@ -892,8 +968,11 @@ $("#autoResult").addEventListener("click", (event) => {
   const { params } = candidates[+button.dataset.cand];
   applyParams(params);
   $$("#autoResult [data-cand]").forEach((choice) => {
-    choice.classList.toggle("primary", choice === button);
-    choice.setAttribute("aria-pressed", String(choice === button));
+    const isChosen = choice === button;
+    choice.classList.toggle("primary", isChosen);
+    choice.setAttribute("aria-pressed", String(isChosen));
+    choice.textContent = isChosen ? "Đã chọn" : "Xác nhận";
+    choice.closest(".cand")?.classList.toggle("cand-selected", isChosen);
   });
   schedulePreview({ delay: 0, keepTuneResult: true, keepImage: true });
 });
@@ -966,7 +1045,7 @@ $("#sendBtn").onclick = async () => {
   }
 };
 
-// ---------------- Machine Selector ----------------
+// ---------------- Machine Selector (Zero Repetition) ----------------
 async function loadMachines() {
   const token = app.token;
   const previous = app.selectedMachine;
@@ -993,16 +1072,14 @@ function renderMachinePick() {
   if (!container) return;
   if (!app.machines.length) {
     container.innerHTML = '<p class="muted">Chưa có máy vẽ trong hệ thống.</p>';
+    renderMachineInfo();
     return;
   }
   container.innerHTML = `
-    <label>Máy nhận lệnh
-      <select id="machineSelect">
-        <option value="" disabled ${app.selectedMachine ? "" : "selected"}>Chọn máy nhận</option>
-        ${app.machines.map((m) => `<option value="${esc(m.id)}" ${app.selectedMachine === m.id ? "selected" : ""}>${esc(m.name)} · ${esc(m.id)} (${m.online ? "Có kết nối" : "Mất kết nối"})</option>`).join("")}
-      </select>
-    </label>
-    <div id="machineInfo"></div>`;
+    <select id="machineSelect" aria-label="Chọn máy nhận lệnh">
+      <option value="" disabled ${app.selectedMachine ? "" : "selected"}>Chọn máy nhận</option>
+      ${app.machines.map((m) => `<option value="${esc(m.id)}" ${app.selectedMachine === m.id ? "selected" : ""}>${esc(m.name)} · ${esc(m.id)}</option>`).join("")}
+    </select>`;
   $("#machineSelect").onchange = (event) => {
     app.selectedMachine = event.target.value;
     renderMachineInfo();
@@ -1021,12 +1098,9 @@ function renderMachineInfo() {
   if (!info) return;
   const m = app.machines.find((machine) => machine.id === app.selectedMachine);
   info.innerHTML = m ? `
-    <div class="machine-meta">
-      <span>Vùng vẽ: <strong class="tabular-nums">${m.work_width} × ${m.work_height} mm</strong></span>
-      ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
-    </div>
-    ${m.online ? "" : '<p class="muted option-hint error">Máy đang mất kết nối. Lệnh gửi sẽ chờ trong hàng đợi.</p>'}`
-    : '<p class="muted option-hint">Chọn máy vẽ để tiếp tục.</p>';
+    <span class="machine-dim tabular-nums">${m.work_width} × ${m.work_height} mm</span>
+    ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}`
+    : '<span class="muted">Chưa chọn máy</span>';
 }
 
 function renderMachineCards() {
@@ -1259,7 +1333,7 @@ async function loadAdmin() {
   const [{ machines }, { users }, { jobs }] = await Promise.all([api("/admin/machines"), api("/admin/users"), api("/admin/queue")]);
   if (token !== app.token) return;
   $("#admMachines").innerHTML = machines.map((m) => `<tr>
-    <td><code>${esc(m.id)}</code></td><td><strong>${esc(m.name)}</strong></td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " (tắt)"}</td>
+    <td><code>${esc(m.id)}</code></td><td><strong>${esc(m.name)}</strong></td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " · Tắt"}</td>
     <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><code>${esc(m.token)}</code></td>
     <td><div class="admin-row-actions">${m.needs_inspection && m.online && m.state === "IDLE"
           ? `<button class="small" data-m="${esc(m.id)}" data-a="inspection">Xác nhận đã kiểm tra giấy</button>` : ""}
@@ -1409,12 +1483,10 @@ function connectWs() {
 function onMachineStatus(m) {
   const i = app.machines.findIndex((x) => x.id === m.id);
   if (i >= 0) app.machines[i] = { ...app.machines[i], ...m };
-  const option = [...($("#machineSelect")?.options ?? [])].find((item) => item.value === m.id);
-  if (option) option.textContent = `${m.name} · ${m.id} (${m.online ? "Có kết nối" : "Mất kết nối"})`;
   renderMachineInfo(); renderMachineCards();
   syncActions();
-  if (m.state === "OFFLINE") toast(`Máy ${m.name} mất kết nối`, "warn");
-  if (m.event === "ERROR") toast(`Máy ${m.name}: ${m.error}`, "err");
+  if (m.state === "OFFLINE") toast(`${machineLabel(m.name)} mất kết nối`, "warn");
+  if (m.event === "ERROR") toast(`${machineLabel(m.name)}: ${m.error}`, "err");
   refreshJobViews();
   if (!$("#tab-admin").classList.contains("hidden")) loadAdmin();
 }

@@ -69,7 +69,7 @@
         </div>
       </div>
 
-      <!-- Right Column: All-English Minimalist Editorial Showcase (Zero Tech-Stack Bragging) -->
+      <!-- Right Column: All-English Minimalist Editorial Showcase -->
       <div class="login-pane-showcase" aria-hidden="true">
         <div class="showcase-shell">
           <div class="showcase-hero-card" id="showcaseCard">
@@ -92,10 +92,8 @@
                 <rect width="460" height="270" fill="url(#darkCadGrid)" />
                 <rect width="460" height="270" fill="url(#orangeGlow)" />
 
-                <!-- Precision Drawing Bed -->
                 <rect x="34" y="24" width="392" height="220" rx="10" fill="url(#bedShade)" stroke="rgba(255,255,255,0.12)" stroke-width="1"/>
 
-                <!-- Millimeter Ruler Ticks -->
                 <g stroke="rgba(255,255,255,0.20)" stroke-width="1">
                   <line x1="66" y1="24" x2="66" y2="30"/><line x1="114" y1="24" x2="114" y2="33"/>
                   <line x1="162" y1="24" x2="162" y2="30"/><line x1="210" y1="24" x2="210" y2="33"/>
@@ -105,7 +103,6 @@
                   <line x1="34" y1="164" x2="42" y2="164"/><line x1="34" y1="212" x2="44" y2="212"/>
                 </g>
 
-                <!-- Corner Registration Marks -->
                 <g stroke="rgba(255,255,255,0.32)" stroke-width="1">
                   <path d="M 46 36 h 8 M 50 32 v 8"/>
                   <path d="M 406 36 h 8 M 410 32 v 8"/>
@@ -113,34 +110,28 @@
                   <path d="M 406 232 h 8 M 410 228 v 8"/>
                 </g>
 
-                <!-- Clean Studio Status (Zero Tech Jargon) -->
                 <text x="58" y="42" font-family="'JetBrains Mono', monospace" font-size="9.5" fill="rgba(255,255,255,0.45)">0.0, 0.0</text>
                 <g class="svg-live-pill">
                   <circle cx="354" cy="39" r="3" fill="#34D399" class="svg-pulse-dot"/>
                   <text x="362" y="42" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="500" fill="#34D399">READY</text>
                 </g>
 
-                <!-- Pen-Up Travel Vector (Animated Dashed Orange) -->
                 <path class="svg-travel-path" d="M 50 232 L 138 158 M 224 106 L 266 84 M 348 186 L 372 118" stroke="#F97316" stroke-width="1.35" stroke-dasharray="4 4" stroke-linecap="round"/>
 
-                <!-- Pen-Down Geometric Vector Artwork (Animated Smooth Trace) -->
                 <circle class="svg-draw-path" cx="182" cy="134" r="54" stroke="#FFFFFF" stroke-width="1.8" pathLength="100"/>
                 <circle cx="182" cy="134" r="34" stroke="rgba(255,255,255,0.48)" stroke-width="1.15" stroke-dasharray="3 3"/>
                 <polygon class="svg-draw-path svg-draw-delay" points="182,80 228,161 136,161" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round" fill="none" pathLength="100"/>
                 <line x1="120" y1="134" x2="244" y2="134" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
                 <line x1="182" y1="72" x2="182" y2="196" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
 
-                <!-- Right Composition Frame -->
                 <rect class="svg-draw-path svg-draw-delay-2" x="266" y="84" width="106" height="102" rx="14" stroke="#FFFFFF" stroke-width="1.8" pathLength="100"/>
                 <path class="svg-draw-path svg-draw-delay-3" d="M 284 114 L 354 114 M 284 134 L 340 134 M 284 154 L 354 154 M 284 170 L 324 170" stroke="rgba(255,255,255,0.68)" stroke-width="1.4" stroke-linecap="round" pathLength="100"/>
 
-                <!-- Animated Pen Head Reticle -->
                 <g class="svg-pen-head">
                   <circle cx="372" cy="118" r="12" stroke="#F97316" stroke-width="1.2" stroke-dasharray="2.5 2.5" class="svg-reticle-ring"/>
                   <circle cx="372" cy="118" r="4.5" fill="#FFFFFF" stroke="#F97316" stroke-width="1.6"/>
                 </g>
 
-                <!-- Minimal Coordinate Readout -->
                 <rect x="296" y="204" width="114" height="24" rx="6" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.13)"/>
                 <text x="309" y="220" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="500" fill="#E5E5E5">X 142.4 · Y 68.0</text>
               </svg>
@@ -171,7 +162,6 @@
             </div>
           </div>
 
-          <!-- Clean 3-Pillar Product Value Strip (All English, Customer-Focused) -->
           <div class="showcase-metrics-strip">
             <div class="showcase-metric-item">
               <span class="sm-value">0.1 mm</span>
@@ -244,7 +234,7 @@
         </nav>
       </div>
 
-      <!-- Keep #logoutBtn as the LAST focusable element in header for 1-Tab -> #sourceFile -->
+      <!-- Strictly keep #logoutBtn as the LAST focusable element in header for 1-Tab -> #sourceFile -->
       <div class="topbar-status">
         <div class="sidebar-telemetry">
           <span id="wsDot" class="connection" title="Kết nối cập nhật giữa trình duyệt và máy chủ">
@@ -324,8 +314,8 @@
 
             <p id="fileError" class="error banner-error" role="alert" hidden></p>
 
-            <!-- Blueprint Stage with 45° Hatch Buffer & Corner Registration Marks -->
-            <div class="preview-wrap" id="dropZone" tabindex="0" role="region" aria-label="Bàn vẽ">
+            <!-- Blueprint Stage (Clickable when empty) -->
+            <div class="preview-wrap is-empty" id="dropZone" tabindex="0" role="region" aria-label="Bàn vẽ">
               <span class="corner-cross cross-tl" aria-hidden="true">+</span>
               <span class="corner-cross cross-tr" aria-hidden="true">+</span>
               <span class="corner-cross cross-bl" aria-hidden="true">+</span>
@@ -341,7 +331,7 @@
                   </svg>
                 </div>
                 <h3>Chưa có ảnh đầu vào</h3>
-                <p>Chọn hoặc kéo thả ảnh PNG/JPG vào đây để bắt đầu.</p>
+                <p>Bấm vào đây hoặc kéo thả ảnh PNG/JPG để bắt đầu.</p>
               </div>
             </div>
 
@@ -359,8 +349,6 @@
                 <button type="button" id="retryPreview" class="small ghost hidden">Thử lại</button>
               </div>
               <div id="stats" class="preview-stats tabular-nums" aria-live="polite"></div>
-              <p id="printHint" class="compare-legend" hidden></p>
-              <p id="compareLegend" class="compare-legend" hidden>Nét xanh là đường bút. Ảnh gốc nằm bên dưới.</p>
             </div>
 
             <!-- Active Job Quick Monitor -->
@@ -379,10 +367,10 @@
             </div>
           </section>
 
-          <!-- Right Inspector Column: Seamless Hairline Rail -->
+          <!-- Right Inspector Column: Roomy Parameters + Ultra-Compact Pinned Dispatch Dock -->
           <aside class="draw-sidebar">
             <!-- Scrollable Parameters Section -->
-            <section class="card settings-card" aria-labelledby="settingsTitle">
+            <section class="card settings-card" id="settingsCard" aria-labelledby="settingsTitle">
               <form id="convertForm">
                 <div class="pane-title pane-title-actions">
                   <h2 id="settingsTitle">Thông số chuyển đổi</h2>
@@ -393,12 +381,12 @@
                   <div class="form-row size-row">
                     <label class="input-field-recessed">
                       <span class="field-prefix">Rộng</span>
-                      <input type="number" name="widthMm" value="120" min="1" max="120" step="any" required />
+                      <input type="number" name="widthMm" data-label="Chiều rộng" value="120" min="1" max="120" step="any" required />
                       <span class="field-suffix">mm</span>
                     </label>
                     <label class="input-field-recessed">
                       <span class="field-prefix">Cao</span>
-                      <input type="number" name="heightMm" value="80" min="1" max="80" step="any" required />
+                      <input type="number" name="heightMm" data-label="Chiều cao" value="80" min="1" max="80" step="any" required />
                       <span class="field-suffix">mm</span>
                     </label>
                   </div>
@@ -410,89 +398,111 @@
                       <output id="detailVal" class="val-pill tabular-nums">5</output>
                     </label>
                     <input type="range" name="detail" min="1" max="10" value="5" />
-                    <div class="range-labels muted"><span>Thô (nhanh)</span><span>Chi tiết (kỹ)</span></div>
+                    <div class="range-labels muted"><span>Nhanh</span><span>Chi tiết</span></div>
                   </div>
 
                   <div class="control-group">
                     <label>Kiểu nét
                       <select name="mode">
-                        <option value="centerline">Đường tâm (nét đơn)</option>
+                        <option value="centerline">Đường tâm</option>
                         <option value="outline">Đường viền</option>
                         <option value="fill">Viền và tô gạch</option>
                       </select>
                     </label>
                   </div>
 
-                  <!-- Auto-Tune Panel -->
+                  <!-- Single Prominent Auto-Tune CTA + Progressive Live Cards -->
                   <div class="auto-tune-box">
-                    <div class="form-row auto-tune-group" role="group" aria-label="Tìm cấu hình phù hợp">
-                      <button type="button" id="autoBtn" class="auto-btn" disabled>Gợi ý cấu hình</button>
-                      <button type="button" class="auto-btn" data-tune="fast" aria-label="Tự dò nhanh" disabled>Nhanh</button>
-                      <button type="button" class="auto-btn" data-tune="detail" aria-label="Tự dò chi tiết" disabled>Chi tiết</button>
+                    <button type="button" id="autoBtn" class="auto-cta-btn" disabled>
+                      <svg class="auto-cta-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"></path>
+                      </svg>
+                      <span class="auto-cta-text">Gợi ý cấu hình</span>
+                    </button>
+                    <div class="auto-quick-links" role="group" aria-label="Tự dò theo chế độ riêng">
+                      <span class="auto-quick-caption">Dò nhanh riêng:</span>
+                      <button type="button" class="tune-link" data-tune="fast" aria-label="Tự dò nhanh" disabled>Nhanh</button>
+                      <span class="auto-quick-dot" aria-hidden="true">·</span>
+                      <button type="button" class="tune-link" data-tune="detail" aria-label="Tự dò chi tiết" disabled>Chi tiết</button>
                     </div>
                     <div id="autoResult" class="auto-result" aria-live="polite"></div>
                   </div>
 
-                  <!-- Advanced Accordion -->
+                  <!-- Advanced Accordion (Grouped 2-column compact layout) -->
                   <details id="advancedOptions" class="advanced-details">
-                    <summary>Tùy chọn nâng cao</summary>
+                    <summary>
+                      <span>Tùy chọn nâng cao</span>
+                      <span class="advanced-chevron" aria-hidden="true"></span>
+                    </summary>
                     <div class="advanced-inner">
-                      <label>Tách nét nhị phân
-                        <select name="thresholdMode">
-                          <option value="auto">Tự động (Otsu)</option>
-                          <option value="adaptive">Thích nghi ánh sáng</option>
-                          <option value="manual">Thủ công</option>
-                        </select>
-                      </label>
-                      <label id="thresholdRow" class="hidden">
-                        <span class="inline-slider-head"><span>Ngưỡng tách nét</span><output id="thresholdVal" class="val-pill tabular-nums">128</output></span>
-                        <input type="range" name="threshold" min="1" max="254" value="128" />
-                      </label>
-                      <div class="form-row">
-                        <label>Làm mượt
-                          <select name="smoothing">
-                            <option>0</option>
-                            <option selected>1</option>
-                            <option>2</option>
-                            <option>3</option>
-                          </select>
+                      <div class="adv-section">
+                        <div class="adv-section-label">Xử lý ảnh &amp; tách nét</div>
+                        <div class="form-row">
+                          <label>Tách nét
+                            <select name="thresholdMode">
+                              <option value="auto">Tự động</option>
+                              <option value="adaptive">Thích nghi ánh sáng</option>
+                              <option value="manual">Thủ công</option>
+                            </select>
+                          </label>
+                          <label>Đảo màu
+                            <select name="invert">
+                              <option value="auto">Tự động</option>
+                              <option value="false">Không</option>
+                              <option value="true">Có</option>
+                            </select>
+                          </label>
+                        </div>
+                        <label id="thresholdRow" class="hidden">
+                          <span class="inline-slider-head"><span>Ngưỡng tách nét</span><output id="thresholdVal" class="val-pill tabular-nums">128</output></span>
+                          <input type="range" name="threshold" min="1" max="254" value="128" />
                         </label>
-                        <label>Đảo màu
-                          <select name="invert">
-                            <option value="auto">Tự động</option>
-                            <option value="false">Không</option>
-                            <option value="true">Có</option>
-                          </select>
+                        <div class="form-row">
+                          <label>Làm mượt
+                            <select name="smoothing">
+                              <option>0</option>
+                              <option selected>1</option>
+                              <option>2</option>
+                              <option>3</option>
+                            </select>
+                          </label>
+                          <label>Giản lược · mm
+                            <input type="number" name="simplifyMm" placeholder="Tự động" min="0.03" max="1" step="0.01" />
+                          </label>
+                        </div>
+                        <div class="form-row">
+                          <label>Phân giải · px
+                            <input type="number" name="rasterPx" placeholder="Tự động" min="210" max="1280" />
+                          </label>
+                          <label>Bề rộng mực · mm
+                            <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.01" required />
+                          </label>
+                        </div>
+                        <label class="check adv-check">
+                          <input type="checkbox" name="despeckle" checked />
+                          <span>Lọc đốm nhiễu nhỏ</span>
                         </label>
                       </div>
-                      <div class="form-row">
-                        <label>Dung sai giản lược (mm)
-                          <input type="number" name="simplifyMm" placeholder="Tự động" min="0.03" max="1" step="0.01" />
-                        </label>
-                        <label>Bước gạch / nét bút
-                          <input type="number" name="hatchRatio" value="0.9" min="0.6" max="1" step="0.01" required />
-                        </label>
+
+                      <div class="adv-section" id="fillAdvancedGroup">
+                        <div class="adv-section-head">
+                          <span class="adv-section-label">Tô gạch</span>
+                          <span class="adv-mode-note" id="fillModeNote">Chỉ dùng cho Viền và tô gạch</span>
+                        </div>
+                        <div class="form-row">
+                          <label>Cách tô
+                            <select name="fillStrategy">
+                              <option value="legacy">Viền và gạch</option>
+                              <option value="inset-x">Gạch ngang mép trong</option>
+                              <option value="inset-y">Gạch dọc mép trong</option>
+                            </select>
+                          </label>
+                          <label>Bước gạch / bút
+                            <input type="number" name="hatchRatio" value="0.9" min="0.6" max="1" step="0.01" required />
+                          </label>
+                        </div>
                       </div>
-                      <div class="form-row">
-                        <label>Cách tô
-                          <select name="fillStrategy">
-                            <option value="legacy">Viền và gạch</option>
-                            <option value="inset-x">Tô gạch ngang sát mép trong</option>
-                            <option value="inset-y">Tô gạch dọc sát mép trong</option>
-                          </select>
-                        </label>
-                        <label>Độ phân giải dò nét (px)
-                          <input type="number" name="rasterPx" placeholder="Tự động" min="210" max="1280" />
-                        </label>
-                      </div>
-                      <label>Bề rộng mực trên giấy (mm)
-                        <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.01" required />
-                      </label>
-                      <p class="option-hint muted">0,5 mm là giá trị mô phỏng. Nhập bề rộng mực đo được nếu có.</p>
-                      <label class="check">
-                        <input type="checkbox" name="despeckle" checked />
-                        <span>Lọc đốm nhiễu nhỏ</span>
-                      </label>
+
                       <p class="option-hint muted">Tốc độ và lệnh nâng, hạ bút được lấy từ cấu hình máy.</p>
                     </div>
                   </details>
@@ -500,34 +510,39 @@
               </form>
             </section>
 
-            <!-- Bottom Pinned Machine Dispatch Dock -->
+            <!-- Ultra-Compact Bottom Pinned Machine Dispatch Dock (No redundant title bar, zero repeated warnings) -->
             <section class="card dispatch-card" aria-labelledby="machineTitle">
-              <div class="pane-title">
-                <h2 id="machineTitle">Máy nhận và lệnh vẽ</h2>
-              </div>
-              <div class="pane-body">
+              <div class="dispatch-body">
+                <div class="dispatch-head-row">
+                  <h2 id="machineTitle" class="dispatch-label">Máy nhận lệnh</h2>
+                  <div id="machineInfo" class="dispatch-machine-meta"></div>
+                </div>
+
                 <div id="machinePick" class="machine-pick-wrapper"></div>
+
                 <div class="dispatch-actions">
                   <button type="button" class="primary send-btn" id="sendBtn" disabled>Gửi bản vẽ</button>
                   <button type="button" class="download-btn" id="downloadBtn" disabled title="Tải file G-code về máy">
                     Tải G-code
                   </button>
                 </div>
+
                 <div id="nextStepGuide" class="step-guide muted">
                   <span id="guideText">Bước 1: Chọn ảnh để bắt đầu.</span>
                 </div>
                 <p id="sendMsg" class="send-status" role="status"></p>
-                <div class="dispatch-aux-row">
-                  <p id="draftStatus" class="muted send-status" role="status"></p>
+                <p id="draftStatus" class="muted send-status" role="status"></p>
+
+                <div class="dispatch-footer-tools">
+                  <details id="gcodeDetails" class="gcode-details hidden">
+                    <summary>Mã G-code</summary>
+                    <pre id="gcodeText" tabindex="0"></pre>
+                  </details>
                   <div class="dispatch-aux-actions">
                     <button type="button" id="discardDraft" class="small ghost" hidden>Xóa bản nháp</button>
                     <button type="button" id="showSentJob" class="small ghost hidden">Xem phiên vẽ →</button>
                   </div>
                 </div>
-                <details id="gcodeDetails" class="gcode-details hidden">
-                  <summary>Mã G-code</summary>
-                  <pre id="gcodeText" tabindex="0"></pre>
-                </details>
               </div>
             </section>
           </aside>
@@ -599,7 +614,7 @@
                     <th>Mã máy</th>
                     <th>Tên hiển thị</th>
                     <th>Trạng thái</th>
-                    <th>Vùng vẽ (mm)</th>
+                    <th>Vùng vẽ · mm</th>
                     <th>Token</th>
                     <th>Thao tác</th>
                   </tr>

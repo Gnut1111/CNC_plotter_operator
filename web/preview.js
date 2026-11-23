@@ -51,7 +51,7 @@ export function paintPreview(canvas, { area, size, image, preview, view, showTra
   const X = (x) => left + x * k;
   const Y = (y) => top + (area.h - y) * k;
 
-  // Deterministic crisp paper bed (deterministic rendering for bit-for-bit toDataURL() stability)
+  // Deterministic crisp paper bed (bit-for-bit toDataURL() stability)
   ctx.fillStyle = "#FFFFFF";
   ctx.fillRect(left, top, area.w * k, area.h * k);
   ctx.strokeStyle = "#CBD5E1";
@@ -84,7 +84,6 @@ export function paintPreview(canvas, { area, size, image, preview, view, showTra
     ctx.stroke();
   }
 
-  // Deterministic local system font (no remote font-swap race between renders)
   ctx.fillStyle = "#737373";
   ctx.font = "11px system-ui, -apple-system, sans-serif";
   ctx.textBaseline = "middle";
