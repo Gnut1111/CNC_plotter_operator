@@ -8,6 +8,7 @@ const config = require("./config");
 const { db } = require("./db");
 const { client, topics } = require("./mqttClient");
 const realtime = require("./realtime");
+const { machineArea, validateGcode } = require("./machine-profile");
 
 const ACTIVE = ["SENDING", "READY", "DRAWING", "PAUSED"];
 const FINAL = ["COMPLETED", "CANCELLED", "FAILED"];
@@ -68,11 +69,21 @@ async function tryDispatch(machineId) {
   const m = db.prepare("SELECT * FROM machines WHERE id = ?").get(machineId);
   if (!m || !m.online || !m.enabled || m.state !== "IDLE") return;
   if (activeJob(machineId)) return;
-  const next = db.prepare("SELECT * FROM jobs WHERE machine_id = ? AND status = 'QUEUED' ORDER BY id LIMIT 1").get(machineId);
+  const oldest = db.prepare(`SELECT j.id, d.gcode_path FROM jobs j JOIN drawings d ON d.id = j.drawing_id
+    WHERE j.machine_id = ? AND j.status = 'QUEUED' ORDER BY j.id LIMIT 1`);
+  const area = machineArea(m);
+  let next, data;
+  while ((next = oldest.get(machineId))) {
+    try {
+      data = fs.readFileSync(next.gcode_path);
+      const error = validateGcode(data.toString("utf8"), area);
+      if (!error) break;
+      setJob(next.id, { status: "FAILED", error }, "MACHINE_PROFILE_MISMATCH");
+    } catch (error) {
+      setJob(next.id, { status: "FAILED", error: "Không đọc được tệp G-code của phiên." }, "FILE_READ_ERROR");
+    }
+  }
   if (!next) return;
-
-  const drawing = db.prepare("SELECT * FROM drawings WHERE id = ?").get(next.drawing_id);
-  const data = fs.readFileSync(drawing.gcode_path);
   const size = config.transfer.chunkSize;
   const total = Math.ceil(data.length / size);
   setJob(next.id, { status: "SENDING", progress: 0 }, "SENDING");

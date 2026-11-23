@@ -180,10 +180,10 @@
                   <!-- Essential Controls -->
                   <div class="form-row">
                     <label>Rộng tối đa (mm)
-                      <input type="number" name="widthMm" value="150" min="10" step="any" required />
+                      <input type="number" name="widthMm" value="120" min="1" max="120" step="any" required />
                     </label>
                     <label>Cao tối đa (mm)
-                      <input type="number" name="heightMm" value="150" min="10" step="any" required />
+                      <input type="number" name="heightMm" value="80" min="1" max="80" step="any" required />
                     </label>
                   </div>
                   <p class="muted option-hint">Giữ tỷ lệ ảnh và căn giữa vùng vẽ của máy.</p>
@@ -267,29 +267,15 @@
                           <input type="number" name="rasterPx" placeholder="Tự động" min="210" max="1280" />
                         </label>
                       </div>
-                      <label>Bề rộng nét bút (mm)
-                        <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.1" required />
+                      <label>Bề rộng mực trên giấy (mm)
+                        <input type="number" name="penWidthMm" value="0.5" min="0.1" max="3" step="0.01" required />
                       </label>
+                      <p class="option-hint muted">0,5 mm là giá trị mô phỏng. Nhập bề rộng mực đo được nếu có.</p>
                       <label class="check">
                         <input type="checkbox" name="despeckle" checked />
                         <span>Lọc đốm nhiễu nhỏ</span>
                       </label>
-                      <div class="form-row">
-                        <label>Tốc độ vẽ (mm/phút)
-                          <input type="number" name="drawFeed" value="1500" min="100" max="10000" required />
-                        </label>
-                        <label>Chạy không (mm/phút)
-                          <input type="number" name="travelFeed" value="3000" min="100" max="10000" required />
-                        </label>
-                      </div>
-                      <div class="form-row">
-                        <label>Lệnh nâng bút
-                          <input name="penUp" value="M5" pattern="[A-Za-z0-9 .\-]{1,20}" required />
-                        </label>
-                        <label>Lệnh hạ bút
-                          <input name="penDown" value="M3 S90" pattern="[A-Za-z0-9 .\-]{1,20}" required />
-                        </label>
-                      </div>
+                      <p class="option-hint muted">Máy HTrang · vẽ 900 mm/phút · chạy không theo rapid của Pico · nâng hạ bút bằng lệnh Z.</p>
                     </div>
                   </details>
                 </div>
@@ -364,8 +350,8 @@
             <form id="addMachineForm" class="row inline-form">
               <input name="id" placeholder="Mã máy (vd: cnc-02)" required />
               <input name="name" placeholder="Tên hiển thị" />
-              <input name="workWidth" type="number" placeholder="Rộng mm" value="200" />
-              <input name="workHeight" type="number" placeholder="Cao mm" value="200" />
+              <input name="workWidth" type="number" placeholder="Rộng mm" value="120" min="1" max="120" step="any" />
+              <input name="workHeight" type="number" placeholder="Cao mm" value="80" min="1" max="80" step="any" />
               <button class="primary" type="submit">Thêm máy</button>
             </form>
           </div>

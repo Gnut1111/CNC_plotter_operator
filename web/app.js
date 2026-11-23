@@ -114,7 +114,7 @@ let revision = 0, savedDrawingId, sentJob, activeJob = null, sending = false, sh
 
 function workArea() {
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
-  return machine ? { w: machine.work_width, h: machine.work_height } : { w: 200, h: 200 };
+  return machine ? { w: machine.work_width, h: machine.work_height } : { w: 120, h: 80 };
 }
 
 function readParams() {
@@ -124,8 +124,6 @@ function readParams() {
     threshold: tm === "manual" ? +form.threshold.value : tm,
     invert: form.invert.value, mode: form.mode.value, smoothing: +form.smoothing.value,
     despeckle: form.despeckle.checked, penWidthMm: +form.penWidthMm.value,
-    drawFeed: +form.drawFeed.value, travelFeed: +form.travelFeed.value,
-    penUp: form.penUp.value.trim(), penDown: form.penDown.value.trim(),
   };
   p.simplifyMm = form.simplifyMm.value ? +form.simplifyMm.value : null;
   p.hatchRatio = +form.hatchRatio.value;
@@ -486,8 +484,6 @@ async function tuneDrawing(profile) {
     form.fillStrategy.value = params.fillStrategy;
     form.rasterPx.value = params.rasterPx ?? "";
     form.despeckle.checked = params.despeckle;
-    form.penUp.value = params.penUp;
-    form.penDown.value = params.penDown;
     form.thresholdMode.value = params.threshold === "adaptive" ? "adaptive" : "manual";
     if (params.threshold !== "adaptive") form.threshold.value = params.threshold;
     form.invert.value = String(params.invert);

@@ -47,7 +47,7 @@ test("conversion closes the O in the bundled line-art sample", async () => {
   const { join } = require("node:path");
   const { convert } = require("../src/converter");
   const image = await readFile(join(__dirname, "../../docs/samples/lineart.png"));
-  const { gcode, params } = await convert(image, {}, { width: 200, height: 200 });
+  const { gcode, params } = await convert(image, {}, { width: 120, height: 80 });
   const xy = (line) => line.match(/X[\d.]+ Y[\d.]+/)?.[0];
   const paths = gcode.split(`\n${params.penUp}\n`).slice(1).map((chunk) =>
     chunk.split("\n").map(xy).filter(Boolean));

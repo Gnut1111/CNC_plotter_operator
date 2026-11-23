@@ -28,8 +28,8 @@ CREATE TABLE IF NOT EXISTS machines (
   state       TEXT NOT NULL DEFAULT 'OFFLINE',
   online      INTEGER NOT NULL DEFAULT 0,
   last_seen   TEXT,
-  work_width  REAL NOT NULL DEFAULT 200,
-  work_height REAL NOT NULL DEFAULT 200,
+  work_width  REAL NOT NULL DEFAULT ${config.workArea.width},
+  work_height REAL NOT NULL DEFAULT ${config.workArea.height},
   enabled     INTEGER NOT NULL DEFAULT 1
 );
 
@@ -75,12 +75,15 @@ function seed() {
   insertUser.run("admin", bcrypt.hashSync("admin123", 10), "admin");
   insertUser.run("user", bcrypt.hashSync("user123", 10), "user");
 
-  const insertMachine = db.prepare("INSERT INTO machines (id, name, token) VALUES (?, ?, ?)");
-  insertMachine.run("cnc-01", "Máy vẽ thật #1", "cnc-01-token");
-  insertMachine.run("sim-01", "Máy giả lập #1", "sim-01-token");
+  const insertMachine = db.prepare("INSERT INTO machines (id, name, token, work_width, work_height) VALUES (?, ?, ?, ?, ?)");
+  insertMachine.run("cnc-01", "Máy vẽ thật #1", "cnc-01-token", config.workArea.width, config.workArea.height);
+  insertMachine.run("sim-01", "Máy giả lập #1", "sim-01-token", config.workArea.width, config.workArea.height);
   console.log("[db] seeded: admin/admin123, user/user123, machines cnc-01, sim-01");
 }
 seed();
+db.prepare(`UPDATE machines SET work_width = max(1, min(work_width, ?)), work_height = max(1, min(work_height, ?))
+  WHERE work_width NOT BETWEEN 1 AND ? OR work_height NOT BETWEEN 1 AND ?`)
+  .run(config.workArea.width, config.workArea.height, config.workArea.width, config.workArea.height);
 
 function newToken() {
   return crypto.randomBytes(16).toString("hex");

@@ -8,6 +8,7 @@ const config = require("./config");
 const { db, newToken } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
 const { convert, DEFAULTS } = require("./converter");
+const { profile, machineArea, validateGcode } = require("./machine-profile");
 const { tuneInWorker } = require("./tune-worker");
 const dispatcher = require("./dispatcher");
 const { publicMachine } = require("./statusService");
@@ -39,10 +40,10 @@ function isPngOrJpeg(buf) {
 
 function workAreaOf(machineId) {
   const m = machineId && db.prepare("SELECT work_width, work_height FROM machines WHERE id = ?").get(machineId);
-  return m ? { width: m.work_width, height: m.work_height } : config.workArea;
+  return m ? machineArea(m) : config.workArea;
 }
 
-router.get("/converter/defaults", (req, res) => res.json({ defaults: DEFAULTS, workArea: config.workArea }));
+router.get("/converter/defaults", (req, res) => res.json({ defaults: DEFAULTS, workArea: config.workArea, profile }));
 
 /** Kiểm tra file tải lên + chạy hàm xử lý ảnh; trả null nếu đã gửi phản hồi lỗi */
 async function processUpload(req, res, fn) {
@@ -141,6 +142,8 @@ router.post("/jobs", (req, res) => {
   if (!d || (d.user_id !== req.user.id && req.user.role !== "admin")) return res.status(404).json({ error: "Không tìm thấy bản vẽ" });
   const m = db.prepare("SELECT * FROM machines WHERE id = ? AND enabled = 1").get(machineId);
   if (!m) return res.status(404).json({ error: "Không tìm thấy máy" });
+  const error = validateGcode(fs.readFileSync(d.gcode_path, "utf8"), machineArea(m));
+  if (error) return res.status(409).json({ error });
   const job = dispatcher.enqueue({ drawingId, machineId, userId: req.user.id });
   res.status(201).json({ job });
 });
@@ -173,13 +176,22 @@ admin.use(requireRole("admin"));
 
 admin.get("/machines", (req, res) => res.json({ machines: db.prepare("SELECT * FROM machines ORDER BY id").all() }));
 
+function configuredArea(input, fallback) {
+  const width = input.workWidth === undefined ? fallback.width : Number(input.workWidth);
+  const height = input.workHeight === undefined ? fallback.height : Number(input.workHeight);
+  if (!(width >= 1 && width <= profile.workArea.width && height >= 1 && height <= profile.workArea.height)) return null;
+  return { width, height };
+}
+
 admin.post("/machines", (req, res) => {
   const id = String(req.body.id || "").trim();
   if (!/^[a-z0-9-]{2,32}$/.test(id)) return res.status(400).json({ error: "Mã máy chỉ gồm a-z, 0-9, '-' (2–32 ký tự)" });
   if (db.prepare("SELECT 1 FROM machines WHERE id = ?").get(id)) return res.status(409).json({ error: "Mã máy đã tồn tại" });
+  const area = configuredArea(req.body, profile.workArea);
+  if (!area) return res.status(400).json({ error: "Vùng máy HTrang tối đa 120 × 80 mm, mỗi cạnh tối thiểu 1 mm." });
   const token = newToken();
   db.prepare("INSERT INTO machines (id, name, token, work_width, work_height) VALUES (?, ?, ?, ?, ?)")
-    .run(id, String(req.body.name || id), token, Number(req.body.workWidth) || 200, Number(req.body.workHeight) || 200);
+    .run(id, String(req.body.name || id), token, area.width, area.height);
   res.status(201).json({ machine: db.prepare("SELECT * FROM machines WHERE id = ?").get(id) });
 });
 
@@ -188,9 +200,9 @@ admin.patch("/machines/:id", (req, res) => {
   if (!m) return res.status(404).json({ error: "Không tìm thấy máy" });
   const name = req.body.name ?? m.name;
   const enabled = req.body.enabled === undefined ? m.enabled : Number(Boolean(req.body.enabled));
-  const ww = Number(req.body.workWidth) || m.work_width;
-  const wh = Number(req.body.workHeight) || m.work_height;
-  db.prepare("UPDATE machines SET name = ?, enabled = ?, work_width = ?, work_height = ? WHERE id = ?").run(name, enabled, ww, wh, m.id);
+  const area = configuredArea(req.body, machineArea(m));
+  if (!area) return res.status(400).json({ error: "Vùng máy HTrang tối đa 120 × 80 mm, mỗi cạnh tối thiểu 1 mm." });
+  db.prepare("UPDATE machines SET name = ?, enabled = ?, work_width = ?, work_height = ? WHERE id = ?").run(name, enabled, area.width, area.height, m.id);
   res.json({ machine: db.prepare("SELECT * FROM machines WHERE id = ?").get(m.id) });
 });
 

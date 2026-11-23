@@ -1,4 +1,5 @@
 const path = require("path");
+const { profile } = require("./machine-profile");
 
 const ROOT = path.resolve(__dirname, "..");
 
@@ -19,8 +20,7 @@ module.exports = {
     mimeTypes: ["image/png", "image/jpeg"],
   },
 
-  // Vùng vẽ mặc định của máy (mm) — chỉnh theo phần cứng thật
-  workArea: { width: 200, height: 200 },
+  workArea: profile.workArea,
 
   transfer: {
     chunkSize: 2048, // byte mỗi gói file qua MQTT

@@ -105,4 +105,4 @@ Server                                   Máy
 
 ## 7. G-code máy cần hiểu
 
-`G21` (mm), `G90` (tuyệt đối), `G0 X Y` (chạy nhanh, có thể có `F`), `G1 X Y F` (vẽ, nội suy thẳng), `M3 S<góc>` (hạ bút – servo), `M5` (nâng bút), `M2` (kết thúc). Dòng bắt đầu bằng `;` là chú thích. Lệnh nâng/hạ bút đổi được trong tham số chuyển đổi trên web.
+`G21` chọn mm, `G90` chọn tọa độ tuyệt đối. `G0 Z5` nâng bút, `G1 Z0 F300` hạ bút. `G0 X… Y…` chạy không theo rapid của firmware. `G1 X… Y… F900` vẽ. Phiên kết thúc bằng nâng bút, `G0 X0 Y0` rồi `M2`. Dòng bắt đầu bằng `;` là chú thích. Xem [cấu hình máy HTrang](machine-profile.md).

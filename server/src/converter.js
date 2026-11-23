@@ -5,10 +5,11 @@
 const sharp = require("sharp");
 const { traceSkeleton } = require("./trace-paths");
 const { performance } = require("node:perf_hooks");
+const { profile: MACHINE, limitArea } = require("./machine-profile");
 
 const DEFAULTS = {
-  widthMm: 150, // kích thước bản vẽ mong muốn (giữ tỉ lệ ảnh)
-  heightMm: 150,
+  widthMm: MACHINE.workArea.width, // kích thước bản vẽ mong muốn (giữ tỉ lệ ảnh)
+  heightMm: MACHINE.workArea.height,
   detail: 5, // 1..10 — cao hơn = độ phân giải xử lý cao hơn, ít đơn giản hóa hơn
   threshold: "auto", // "auto" | "adaptive" | số 1..254
   invert: "auto", // "auto" | true | false
@@ -20,25 +21,25 @@ const DEFAULTS = {
   rasterPx: null, // null: theo mức chi tiết
   despeckle: true, // xóa đốm nhiễu nhỏ
   penWidthMm: 0.5, // bề rộng nét bút — dùng cho khoảng cách tô gạch và chấm điểm
-  travelFeed: 3000, // mm/phút
-  drawFeed: 1500,
-  penUp: "M5", // servo nâng bút
-  penDown: "M3 S90", // servo hạ bút
+  travelFeed: MACHINE.rapidFeed,
+  drawFeed: MACHINE.drawFeed,
+  penUp: MACHINE.penUp,
+  penDown: MACHINE.penDown,
 };
 
-const PEN_LIFT_SECONDS = 0.4; // thời gian ước lượng cho mỗi lần nhấc/hạ bút
 const EVAL_SIZE = 400;
 const VERIFY_SIZE = 960;
 const TUNE_TIMEOUT_MS = { fast: 14500, detail: 44500, both: 44500 };
 
 function normalizeParams(input = {}, workArea) {
+  workArea = limitArea(workArea);
   const p = { ...DEFAULTS };
   const num = (v, min, max, def) => {
     const n = Number(v);
     return v !== "" && v !== null && Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : def;
   };
-  p.widthMm = num(input.widthMm, 10, workArea.width, Math.min(DEFAULTS.widthMm, workArea.width));
-  p.heightMm = num(input.heightMm, 10, workArea.height, Math.min(DEFAULTS.heightMm, workArea.height));
+  p.widthMm = num(input.widthMm, 1, workArea.width, Math.min(DEFAULTS.widthMm, workArea.width));
+  p.heightMm = num(input.heightMm, 1, workArea.height, Math.min(DEFAULTS.heightMm, workArea.height));
   p.detail = Math.round(num(input.detail, 1, 10, DEFAULTS.detail));
   p.threshold = ["auto", "adaptive"].includes(input.threshold)
     ? input.threshold
@@ -54,10 +55,6 @@ function normalizeParams(input = {}, workArea) {
   if (p.rasterPx !== null) p.rasterPx = Math.round(p.rasterPx);
   p.despeckle = !(input.despeckle === false || input.despeckle === "false");
   p.penWidthMm = num(input.penWidthMm, 0.1, 3, DEFAULTS.penWidthMm);
-  p.travelFeed = num(input.travelFeed, 100, 10000, DEFAULTS.travelFeed);
-  p.drawFeed = num(input.drawFeed, 100, 10000, DEFAULTS.drawFeed);
-  if (typeof input.penUp === "string" && /^[A-Z0-9 .\-]{1,20}$/i.test(input.penUp)) p.penUp = input.penUp;
-  if (typeof input.penDown === "string" && /^[A-Z0-9 .\-]{1,20}$/i.test(input.penDown)) p.penDown = input.penDown;
   return p;
 }
 
@@ -535,19 +532,29 @@ function toMachinePaths(pxPaths, tf, p, workArea) {
     })
     .filter(({ points, connectsJunctions }) => connectsJunctions || length(points) >= 0.5)
     .map(({ points }) => points);
-  paths = order(p.mode === "centerline" ? joinCenterlines(paths) : paths);
-  // Kẹp vào vùng vẽ (TC18: không trục nào vượt giới hạn)
-  for (const pts of paths) for (const q of pts) {
-    q.x = Math.min(workArea.width, Math.max(0, q.x));
-    q.y = Math.min(workArea.height, Math.max(0, q.y));
-  }
-  return paths;
+  // Compare float-to-step truncation as in the Pico, keeping coordinates in mm.
+  const pulse = (mm, steps) => Math.trunc(Math.fround(Math.fround(mm) * steps));
+  const clamp = (v, limit) => Math.min(Math.floor(limit * 1000) / 1000, Math.max(0, Math.round(v * 1000) / 1000));
+  paths = paths.map((points) => {
+    let px, py;
+    const compact = [];
+    for (const q of points) {
+      const x = clamp(q.x, workArea.width), y = clamp(q.y, workArea.height);
+      const sx = pulse(x, MACHINE.stepsPerMm.x), sy = pulse(y, MACHINE.stepsPerMm.y);
+      if (sx === px && sy === py) continue;
+      px = sx;
+      py = sy;
+      compact.push({ x, y });
+    }
+    return compact;
+  }).filter((points) => points.length > 1);
+  return order(p.mode === "centerline" ? joinCenterlines(paths) : paths);
 }
 
 const f = (v) => (Math.round(v * 1000) / 1000).toString();
 
 function toGcode(paths, p) {
-  const lines = ["; Pixel2Plot - CNC_plotter_operator", "G21", "G90", p.penUp, `G0 F${p.travelFeed}`];
+  const lines = ["; Pixel2Plot - CNC_plotter_operator", "G21", "G90", p.penUp];
   for (const path of paths) {
     const [s, ...rest] = path;
     lines.push(`G0 X${f(s.x)} Y${f(s.y)}`);
@@ -677,7 +684,7 @@ function estimate(paths, p) {
   let draw = 0, travel = 0, seconds = 0, cur = { x: 0, y: 0 };
   // Approximate stop-and-go ramps using the legacy controller's 400 mm/s².
   const timeFor = (distance, feed) => {
-    const speed = feed / 60, accel = 400;
+    const speed = feed / 60, accel = MACHINE.accelMmS2;
     return distance < speed * speed / accel
       ? 2 * Math.sqrt(distance / accel)
       : distance / speed + speed / accel;
@@ -685,7 +692,7 @@ function estimate(paths, p) {
   for (const pts of paths) {
     const approach = Math.hypot(pts[0].x - cur.x, pts[0].y - cur.y);
     travel += approach;
-    seconds += timeFor(approach, p.travelFeed) + 2 * PEN_LIFT_SECONDS;
+    seconds += timeFor(approach, p.travelFeed) + 2 * MACHINE.penTransitionSeconds;
     for (let i = 1; i < pts.length; i++) {
       const mm = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
       draw += mm;
@@ -775,7 +782,8 @@ function scoreOutput(gcode, ref, p, workArea, dInk) {
 // Use the same normalized footprint to compare saved G-code from different generators.
 async function assessGcode(buffer, gcode, input, workArea) {
   const { ref } = await scoringReference(buffer);
-  return scoreOutput(gcode, ref, normalizeParams(input, workArea), workArea);
+  const params = normalizeParams(input, workArea);
+  return scoreOutput(gcode, ref, { ...params, penUp: input.penUp ?? params.penUp, penDown: input.penDown ?? params.penDown }, workArea);
 }
 
 /**
@@ -784,6 +792,7 @@ async function assessGcode(buffer, gcode, input, workArea) {
  * @param {{width:number,height:number}} workArea vùng vẽ của máy (mm)
  */
 async function convert(buffer, input, workArea, { refParams } = {}) {
+  workArea = limitArea(workArea);
   const p = normalizeParams(input, workArea);
   const gray = await loadGray(buffer, maxSizeFor(p));
   const { tf, paths, info } = buildFromGray(gray, p, workArea);
@@ -806,6 +815,7 @@ async function convert(buffer, input, workArea, { refParams } = {}) {
 
 /** Search shape first, then refine the best candidates against the same ink mask. */
 async function autoTune(buffer, input, workArea, profile = "both", onVerified) {
+  workArea = limitArea(workArea);
   if (!["fast", "detail", "both"].includes(profile)) throw new Error("Chế độ tìm cấu hình không hợp lệ.");
   const start = performance.now();
   const quick = profile === "fast";
@@ -813,10 +823,6 @@ async function autoTune(buffer, input, workArea, profile = "both", onVerified) {
   const verifyUntil = start + (quick ? 13000 : 41500);
   let timeLimited = false;
   const base = normalizeParams(input, workArea);
-  if (!/^M5$/i.test(base.penUp.trim()) || !/^M3 S(?:\d{1,2}|1[0-7]\d|180)$/i.test(base.penDown.trim())) {
-    throw new Error("Tìm cấu hình cần lệnh nâng M5 và lệnh hạ M3 S0–180 theo giao thức máy.");
-  }
-
   const { coarse: evalGray, source, ref: verifyRef } = await scoringReference(buffer);
   const { ref, info } = referenceMask(evalGray, source);
   const results = [], visited = new Set(), grays = new Map(), caches = new Map();
@@ -827,7 +833,7 @@ async function autoTune(buffer, input, workArea, profile = "both", onVerified) {
   let verifiedCount = 0;
   if (!ref.binary.some(Boolean) && !verifyRef.binary.some(Boolean)) return reply([]);
   const dInk = distanceTransform(ref.binary, ref.width, ref.height);
-  const fixed = { ...base, ...source, fillStrategy: "legacy", rasterPx: null, penUp: base.penUp.trim().toUpperCase(), penDown: base.penDown.trim().toUpperCase() };
+  const fixed = { ...base, ...source, fillStrategy: "legacy", rasterPx: null };
 
   async function tryPlan(params) {
     if (performance.now() >= searchUntil) { timeLimited = true; return; }

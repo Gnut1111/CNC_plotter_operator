@@ -9,7 +9,7 @@
 
 ## Kết quả mô phỏng
 
-Bản cũ là commit `55674e1`. Cả hai bộ G-code được phát lại bằng cùng mô hình đầu bút. Các tỷ lệ dưới đây là **IoU diện tích mực**, khác với số liệu chấm ở 400 px trước đó.
+So sánh lịch sử giữa commit `55674e1` và `1f3a21e`, trước khi áp cấu hình cơ khí HTrang. Cả hai bộ G-code được phát lại bằng cùng mô hình đầu bút. Các tỷ lệ dưới đây là **IoU diện tích mực**, khác với số liệu chấm ở 400 px trước đó.
 
 | Ảnh | Chi tiết cũ | Chi tiết mới | Nhanh cũ | Nhanh mới |
 |---|---:|---:|---:|---:|
@@ -27,7 +27,7 @@ Bản cũ là commit `55674e1`. Cả hai bộ G-code được phát lại bằng
 
 ## Chạy lại
 
-Trong repo, sau khi cài phụ thuộc ở `server/`:
+Để tái tạo đúng bảng lịch sử, chạy ở checkout `1f3a21e` sau khi cài phụ thuộc ở `server/`. Chạy trên commit hiện tại sẽ sử dụng cấu hình máy HTrang:
 
 ```bash
 baseline_dir=$(mktemp -d)
@@ -39,4 +39,4 @@ node --test server/test/*.test.js
 
 Thay các đường dẫn ảnh ở lệnh benchmark bằng ảnh bướm, mandala và rồng để đo nhóm ảnh dày. Có thể gọi riêng từng ảnh để đo thời gian của hai profile mà không phụ thuộc thời lượng của cả nhóm. Báo cáo JSON theo từng ảnh gồm IoU, tỷ lệ mực gốc phủ đúng, tỷ lệ mực đầu ra phủ đúng, thời gian tìm, số cấu hình kiểm tra kỹ và số dòng G-code.
 
-Các kết quả chấm ảnh mô tả mực mô phỏng từ G-code. Sai số bước máy, lực tì bút và lan mực phụ thuộc máy và giấy thật.
+Thời gian vẽ trong bảng dùng cấu hình lịch sử của hai commit này. Các kết quả chấm ảnh mô tả mực mô phỏng từ G-code. Sai số bước máy, lực tì bút và lan mực phụ thuộc máy và giấy thật.

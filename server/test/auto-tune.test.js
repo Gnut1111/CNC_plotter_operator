@@ -4,13 +4,14 @@ const { readFile } = require("node:fs/promises");
 const { join } = require("node:path");
 const sharp = require("sharp");
 const { autoTune, convert, assessGcode } = require("../src/converter");
+const { profile, validateGcode } = require("../src/machine-profile");
 
 const area = { width: 120, height: 80 };
 
 test("auto-tune ranks two reproducible setups while preserving machine settings", async () => {
   const image = await readFile(join(__dirname, "../../docs/samples/lineart.png"));
-  const machine = { widthMm: 105, heightMm: 70, penWidthMm: 0.5, drawFeed: 1250, travelFeed: 2500, penUp: "M5", penDown: "M3 S85" };
-  const result = await autoTune(image, machine, area);
+  const machine = { widthMm: 105, heightMm: 70, penWidthMm: 0.5 };
+  const result = await autoTune(image, { ...machine, penUp: "M5", penDown: "M3 S90", drawFeed: 9500, travelFeed: 2400 }, area);
   assert.deepEqual(result.candidates.map((candidate) => candidate.id), ["detail", "fast"]);
   const [detailed, fast] = result.candidates.map((candidate) => candidate.metrics);
   assert.ok(result.tried > 36 && result.verified > 1);
@@ -22,21 +23,26 @@ test("auto-tune ranks two reproducible setups while preserving machine settings"
     const { params, stats, gcode } = await convert(image, candidate.params, area);
     for (const [key, value] of Object.entries(machine)) assert.equal(params[key], value, key);
     for (const [key, value] of Object.entries(candidate.metrics)) assert.equal(stats[key], value, key);
-    assert.match(gcode, /\nG21\nG90\nM5\nG0 F2500\n/);
+    assert.equal(params.penUp, profile.penUp);
+    assert.equal(params.penDown, profile.penDown);
+    assert.equal(params.drawFeed, profile.drawFeed);
+    assert.equal(params.travelFeed, profile.rapidFeed);
+    assert.match(gcode, /\nG21\nG90\nG0 Z5\n/);
+    assert.equal(validateGcode(gcode, area), null);
     assert.ok(gcode.endsWith("G0 X0 Y0\nM2\n"));
     let penDown = false;
     for (const line of gcode.trim().split("\n")) {
-      if (line === "M3 S85") penDown = true;
-      else if (line === "M5") penDown = false;
+      if (line === profile.penDown) penDown = true;
+      else if (line === profile.penUp) penDown = false;
       else if (line.startsWith("G0 X") || line.startsWith("G1 X")) {
         const match = /^G([01]) X([\d.]+) Y([\d.]+)(?: F(\d+))?$/.exec(line);
         assert.ok(match, line);
         const [, mode, x, y, feed] = match;
         assert.equal(penDown, mode === "1");
         assert.ok(+x >= 0 && +x <= area.width && +y >= 0 && +y <= area.height);
-        if (penDown) assert.equal(+feed, machine.drawFeed);
+        if (penDown) assert.equal(+feed, profile.drawFeed);
       } else {
-        assert.match(line, /^(?:;.*|G21|G90|G0 F2500|M2)$/);
+        assert.match(line, /^(?:;.*|G21|G90|M2)$/);
       }
     }
   }
@@ -49,8 +55,16 @@ test("blank images return no recommendation", async () => {
   assert.equal(result.tried, 0);
 });
 
-test("automatic settings reject movement commands used as pen commands", async () => {
-  await assert.rejects(autoTune(Buffer.alloc(0), { penDown: "G0 X100" }, area), /M3/);
+test("the machine profile clamps oversized requests and rejects stale or oversized G-code", async () => {
+  const image = await readFile(join(__dirname, "../../docs/samples/lineart.png"));
+  const { params, gcode } = await convert(image, { widthMm: 999, heightMm: 999 }, { width: 200, height: 200 });
+  assert.equal(params.widthMm, 120);
+  assert.equal(params.heightMm, 80);
+  assert.equal(validateGcode(gcode, area), null);
+  assert.match(validateGcode(gcode.replaceAll(profile.penUp, "M5"), area), /cấu hình máy/);
+  assert.match(validateGcode(gcode.replace("F900", "F1500"), area), /chuyển động/);
+  assert.match(validateGcode(gcode.replace(/G0 X[\d.]+ Y[\d.]+/, "G0 X121 Y0"), area), /vượt vùng/);
+  assert.match(validateGcode(gcode, { width: 1, height: 1 }), /vượt vùng/);
 });
 
 test("a crossing keeps the same four arms in two pen-down trails", async () => {
@@ -73,7 +87,7 @@ test("strict score detects spilled ink that is close to the original", async () 
     <rect width="100" height="100" fill="white"/>
     <path d="M10 50h80" stroke="black" stroke-width="0.7"/>
   </svg>`)).png().toBuffer();
-  const gcode = (y) => `M5\nG0 X30 Y${y}\nM3 S90\nG1 X90 Y${y} F1500\nM5\n`;
+  const gcode = (y) => `${profile.penUp}\nG0 X30 Y${y}\n${profile.penDown}\nG1 X90 Y${y} F${profile.drawFeed}\n${profile.penUp}\n`;
   const exact = await assessGcode(image, gcode(40), { penWidthMm: 0.5 }, area);
   const shifted = await assessGcode(image, gcode(40.25), { penWidthMm: 0.5 }, area);
   assert.ok(exact.iou > shifted.iou + 10);

@@ -14,7 +14,7 @@ const files = args.filter((a, i) => a !== "--out" && i !== outIdx + 1);
 if (!files.length) { console.log("Cách dùng: node tools/compare.js <ảnh...> --out <thư mục>"); process.exit(1); }
 fs.mkdirSync(outDir, { recursive: true });
 
-const WORK = { width: 200, height: 200 };
+const { profile: { workArea: WORK } } = require("../src/machine-profile");
 const CELL = 360, PAD = 12, HEAD = 56;
 
 // Vẽ G-code ra SVG (chỉ nét bút hạ), khung = vùng bản vẽ
