@@ -247,7 +247,7 @@
       <!-- Keep #logoutBtn as the LAST focusable element in header for 1-Tab -> #sourceFile -->
       <div class="topbar-status">
         <div class="sidebar-telemetry">
-          <span id="wsDot" class="connection" title="Trạng thái đồng bộ trực tuyến">
+          <span id="wsDot" class="connection" title="Kết nối cập nhật giữa trình duyệt và máy chủ">
             <span class="dot" aria-hidden="true"></span>
             <span id="wsLabel">Đang kết nối</span>
           </span>
@@ -364,7 +364,7 @@
             </div>
 
             <!-- Active Job Quick Monitor -->
-            <div id="activeJobBar" class="active-job-bar hidden" role="region" aria-label="Phiên vẽ đang chạy">
+            <div id="activeJobBar" class="active-job-bar hidden" role="region" aria-label="Theo dõi phiên vẽ">
               <div class="active-job-info">
                 <span class="active-job-pulse" aria-hidden="true"></span>
                 <span id="activeJobTitle" class="active-job-title">Đang vẽ</span>
@@ -393,16 +393,16 @@
                   <div class="form-row size-row">
                     <label class="input-field-recessed">
                       <span class="field-prefix">Rộng</span>
-                      <input type="number" name="widthMm" value="150" min="10" step="any" required />
+                      <input type="number" name="widthMm" value="120" min="1" max="120" step="any" required />
                       <span class="field-suffix">mm</span>
                     </label>
                     <label class="input-field-recessed">
                       <span class="field-prefix">Cao</span>
-                      <input type="number" name="heightMm" value="150" min="10" step="any" required />
+                      <input type="number" name="heightMm" value="80" min="1" max="80" step="any" required />
                       <span class="field-suffix">mm</span>
                     </label>
                   </div>
-                  <p class="muted option-hint">Giữ tỷ lệ ảnh và căn giữa vùng vẽ của máy.</p>
+                  <p id="sizeHint" class="muted option-hint">Tối đa 120 × 80 mm. Ảnh giữ nguyên tỷ lệ khi vẽ.</p>
 
                   <div class="control-group">
                     <label class="slider-label">
@@ -493,22 +493,7 @@
                         <input type="checkbox" name="despeckle" checked />
                         <span>Lọc đốm nhiễu nhỏ</span>
                       </label>
-                      <div class="form-row">
-                        <label>Tốc độ vẽ (mm/phút)
-                          <input type="number" name="drawFeed" value="1500" min="100" max="10000" required />
-                        </label>
-                        <label>Chạy không (mm/phút)
-                          <input type="number" name="travelFeed" value="3000" min="100" max="10000" required />
-                        </label>
-                      </div>
-                      <div class="form-row">
-                        <label>Lệnh nâng bút
-                          <input name="penUp" value="M5" pattern="[A-Za-z0-9 .\-]{1,20}" required />
-                        </label>
-                        <label>Lệnh hạ bút
-                          <input name="penDown" value="M3 S90" pattern="[A-Za-z0-9 .\-]{1,20}" required />
-                        </label>
-                      </div>
+                      <p class="option-hint muted">Tốc độ và lệnh nâng, hạ bút được lấy từ cấu hình máy.</p>
                     </div>
                   </details>
                 </div>

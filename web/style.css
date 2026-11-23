@@ -576,12 +576,12 @@ label.check input[type="checkbox"] {
   background: #2563EB;
 }
 
-.badge.PAUSED, .badge.QUEUED, .badge.BOOT, .badge.WAIT_PAPER, .badge.INSPECTION {
+.badge.PAUSED, .badge.QUEUED, .badge.BOOT, .badge.WAIT_PAPER, .badge.INSPECTION, .badge.CANCEL_REQUESTED {
   background: #FFFBEB;
   color: #B45309;
   border-color: rgba(245, 158, 11, 0.24);
 }
-.badge.PAUSED::before, .badge.QUEUED::before, .badge.BOOT::before, .badge.WAIT_PAPER::before, .badge.INSPECTION::before {
+.badge.PAUSED::before, .badge.QUEUED::before, .badge.BOOT::before, .badge.WAIT_PAPER::before, .badge.INSPECTION::before, .badge.CANCEL_REQUESTED::before {
   background: #F59E0B;
 }
 

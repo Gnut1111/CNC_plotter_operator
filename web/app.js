@@ -9,7 +9,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const STATUS_VI = {
   QUEUED: "Hàng đợi", SENDING: "Đang truyền", READY: "Sẵn sàng", DRAWING: "Đang vẽ", PAUSED: "Tạm dừng",
   COMPLETED: "Hoàn thành", CANCELLED: "Đã hủy", FAILED: "Lỗi",
-  WAIT_PAPER: "Chờ giấy", INSPECTION: "Chờ kiểm tra giấy", IDLE: "Sẵn sàng", OFFLINE: "Mất kết nối", RECEIVING: "Nhận file", HOMING: "Về gốc", ERROR: "Lỗi máy", BOOT: "Khởi động",
+  CANCEL_REQUESTED: "Chờ dừng", WAIT_PAPER: "Chờ giấy", INSPECTION: "Chờ kiểm tra giấy", IDLE: "Sẵn sàng", OFFLINE: "Mất kết nối", RECEIVING: "Nhận file", HOMING: "Về gốc", ERROR: "Lỗi máy", BOOT: "Khởi động",
 };
 const badge = (s) => `<span class="badge ${esc(s)}">${esc(STATUS_VI[s] || s)}</span>`;
 
@@ -197,8 +197,11 @@ function enterApp() {
   const token = app.token;
   const machinesReady = loadMachines().catch((err) => toast(err.message, "err"));
   refreshTrackedJob().catch((err) => toast(err.message, "err"));
-  machinesReady.then(() => {
-    if (app.token === token) restoreDraft();
+  draftLoading = true;
+  machinesReady.then(() => app.token === token && restoreDraft()).finally(() => {
+    if (app.token !== token) return;
+    draftLoading = false;
+    syncActions();
   });
   showTab("draw");
   if (pendingSend) $("#sendMsg").textContent = "Có một lần gửi chưa xác nhận. Chọn Xác nhận lại lần gửi.";
@@ -237,7 +240,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024;
 let file, original, originalUrl, preview, displayed, previewTimer, previewRequest, tuneRequest;
 const TUNE_LABELS = { fast: "Nhanh", detail: "Chi tiết" };
 let revision = 0, candidates = [], savedDrawingId, sentJob, activeJob = null, sending = false, view = "paths";
-let pendingSend, restoredDraft = false, draftEpoch = 0;
+let pendingSend, draftLoading = false, restoredDraft = false, draftEpoch = 0;
 let liveConnected = false, jobVersion = 0, refreshTimer, trackingReady = false;
 const userKey = () => `${app.user.id}:${app.user.username}`;
 const storageKey = (name) => `pixel2plot:${name}:${userKey()}`;
@@ -282,6 +285,7 @@ async function restoreDraft() {
       app.selectedMachine = draft.machineId;
       renderMachinePick();
     }
+    updateSizeLimits();
     updateFormLabels();
     handleSelectedFile(draft.file);
     if (draft.sentId) {
@@ -320,6 +324,15 @@ function workArea() {
   return machine ? { w: machine.work_width, h: machine.work_height } : { w: 120, h: 80 };
 }
 
+function updateSizeLimits() {
+  const { w, h } = workArea();
+  for (const [input, limit] of [[form.widthMm, w], [form.heightMm, h]]) {
+    input.max = limit;
+    if (input.valueAsNumber > limit) input.value = limit;
+  }
+  $("#sizeHint").textContent = `Tối đa ${w} × ${h} mm. Ảnh giữ nguyên tỷ lệ khi vẽ.`;
+}
+
 function readParams() {
   const tm = form.thresholdMode.value;
   const p = {
@@ -332,10 +345,6 @@ function readParams() {
   if (form.hatchRatio && form.hatchRatio.value !== "") p.hatchRatio = +form.hatchRatio.value;
   if (form.fillStrategy) p.fillStrategy = form.fillStrategy.value;
   if (form.rasterPx && form.rasterPx.value !== "") p.rasterPx = +form.rasterPx.value;
-  if (form.drawFeed && form.drawFeed.value !== "") p.drawFeed = +form.drawFeed.value;
-  if (form.travelFeed && form.travelFeed.value !== "") p.travelFeed = +form.travelFeed.value;
-  if (form.penUp && form.penUp.value !== "") p.penUp = form.penUp.value;
-  if (form.penDown && form.penDown.value !== "") p.penDown = form.penDown.value;
   return p;
 }
 
@@ -408,7 +417,7 @@ function updateStepper() {
   const s1 = $("#stepIndicator1"), s2 = $("#stepIndicator2"), s3 = $("#stepIndicator3"), s4 = $("#stepIndicator4");
   if (!s1) return;
   [s1, s2, s3, s4].forEach((s) => s.classList.remove("active"));
-  if (sentJob || activeJob) {
+  if (sentJob || pendingSend || (!file && activeJob)) {
     s4.classList.add("active");
   } else if (preview && app.selectedMachine) {
     s3.classList.add("active");
@@ -425,7 +434,7 @@ function updateStepGuide() {
   if (!guideText) return;
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
 
-  if (sentJob) {
+  if (sentJob || pendingSend || sending) {
     if (nextStepGuide) nextStepGuide.hidden = true;
     return;
   }
@@ -441,8 +450,6 @@ function updateStepGuide() {
     guideText.textContent = "Bước 3: Chọn máy vẽ trong danh sách trên.";
   } else if (machine && !machine.online) {
     guideText.textContent = `Máy ${machine.name} đang mất kết nối. Lệnh gửi sẽ nằm trong hàng đợi.`;
-  } else if (sending) {
-    guideText.textContent = "Đang truyền bản vẽ sang máy...";
   } else {
     guideText.textContent = `Sẵn sàng gửi bản vẽ tới ${machine?.name || "máy"}.`;
   }
@@ -467,7 +474,7 @@ function syncActions() {
   $("#downloadBtn").disabled = !preview;
   $("#gcodeDetails").classList.toggle("hidden", !preview);
 
-  const canSend = !sending && (pendingSend || (preview && app.selectedMachine && !sentJob && !tuneRequest));
+  const canSend = !sending && (pendingSend ? !draftLoading : preview && app.selectedMachine && !sentJob && !tuneRequest);
   $("#sendBtn").disabled = !canSend;
   $("#sendBtn").textContent = sending ? "Đang gửi…" : pendingSend ? "Xác nhận lại lần gửi" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
   $("#showSentJob").classList.toggle("hidden", !sentJob);
@@ -501,11 +508,18 @@ function renderActiveJobBar() {
   }
   bar.classList.remove("hidden");
   $("#activeJobTitle").textContent = `Phiên #${current.id}: ${current.drawing_name || "Bản vẽ"} (${current.machine_name || current.machine_id})`;
-  $("#activeJobBadge").innerHTML = badge(current.status);
+  $("#activeJobBadge").innerHTML = badge(current.cancel_requested ? "CANCEL_REQUESTED" : current.status);
+  const notice = jobNotice(current);
   $("#activeJobNotice").textContent = [
     !liveConnected || !trackingReady ? "Tiến độ cuối đã nhận · đang chờ đồng bộ." : "",
-    jobNotice(current),
+    notice,
   ].filter(Boolean).join(" ");
+  if (sentJob?.machine_name) {
+    const state = current.cancel_requested ? "CANCEL_REQUESTED" : current.status;
+    const next = `Đã nhận phiên #${current.id} · ${current.machine_name}. ${notice || (STATUS_VI[state] + ".")}`;
+    const message = $("#sendMsg");
+    if (message.textContent !== next) message.textContent = next;
+  }
   const pct = Number(current.progress) || 0;
   const fill = $("#activeJobBarFill");
   fill.style.width = `${pct}%`;
@@ -521,7 +535,10 @@ function renderActiveJobBar() {
       && !["COMPLETED", "CANCELLED", "FAILED"].includes(current.status) && btn("cancel", "Hủy", "danger"),
     `<button type="button" class="small ghost" data-quick-job="${current.id}" data-act="details">Chi tiết</button>`,
   ].filter(Boolean).join(" ");
-  $("#activeJobActions").innerHTML = actions;
+  if ($("#activeJobActions").dataset.content !== actions) {
+    $("#activeJobActions").innerHTML = actions;
+    $("#activeJobActions").dataset.content = actions;
+  }
 }
 
 $("#activeJobBar")?.addEventListener("click", async (e) => {
@@ -668,6 +685,7 @@ function resetWorkspace() {
   $("#draftStatus").textContent = "";
   fileInput.value = "";
   form.reset();
+  updateSizeLimits();
   updateFormLabels();
   view = "paths";
   sending = false;
@@ -685,17 +703,7 @@ function resetWorkspace() {
 }
 
 function handleSelectedFile(newFile) {
-  if (sending) return;
-  if (!newFile) {
-    releaseOriginal();
-    file = null;
-    closePlayback();
-    $("#fileInfo").textContent = "PNG hoặc JPG · tối đa 5 MB";
-    $("#fileError").hidden = true;
-    schedulePreview({ delay: 0 });
-    return;
-  }
-  if (pendingSend && file) return;
+  if (sending || !newFile || pendingSend && file) return;
   const error = $("#fileError");
   const message = !["image/png", "image/jpeg"].includes(newFile.type)
     ? "Chọn ảnh định dạng PNG hoặc JPG."
@@ -760,6 +768,7 @@ $("#resetSettings").onclick = () => {
     } else if (control.type === "checkbox") control.checked = control.defaultChecked;
     else control.value = control.defaultValue;
   }
+  updateSizeLimits();
   updateFormLabels();
   schedulePreview({ delay: 0 });
 };
@@ -873,10 +882,6 @@ function applyParams(params) {
     form.threshold.value = params.threshold;
   }
   if (form.invert && params.invert !== undefined) form.invert.value = String(params.invert);
-  if (form.drawFeed && params.drawFeed !== undefined) form.drawFeed.value = params.drawFeed;
-  if (form.travelFeed && params.travelFeed !== undefined) form.travelFeed.value = params.travelFeed;
-  if (form.penUp && params.penUp !== undefined) form.penUp.value = params.penUp;
-  if (form.penDown && params.penDown !== undefined) form.penDown.value = params.penDown;
   updateFormLabels();
   view = "paths";
 }
@@ -902,9 +907,9 @@ $("#downloadBtn").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 };
 
-$("#showSentJob").onclick = () => showTab("jobs");
+$("#showSentJob").onclick = () => { if (sentJob) openJobDetails(sentJob.id); };
 $("#sendBtn").onclick = async () => {
-  if (sending || (!pendingSend && (tuneRequest || sentJob || !preview || !app.selectedMachine))) return;
+  if (sending || (pendingSend ? draftLoading : tuneRequest || sentJob || !preview || !app.selectedMachine)) return;
   const current = revision;
   const token = app.token;
   const machineId = app.selectedMachine;
@@ -936,11 +941,10 @@ $("#sendBtn").onclick = async () => {
       activeJob = sentJob;
       trackingReady = liveConnected;
       saveDraft();
-      $("#sendMsg").textContent = `Phiên #${job.id} đã vào hàng đợi · ${job.machine_name}.`;
     } else {
       activeJob = job;
       trackingReady = liveConnected;
-      toast(`Phiên #${job.id} đã vào hàng đợi · ${job.machine_name}.`, "ok");
+      toast(`Đã nhận phiên #${job.id} · ${job.machine_name}.`, "ok");
     }
   } catch (err) {
     if (app.token !== token) return;
@@ -953,7 +957,9 @@ $("#sendBtn").onclick = async () => {
       $("#sendMsg").textContent = "Bản xem trước đã thay đổi. Đang cập nhật…";
     } else {
       setPendingSend(null);
-      $("#sendMsg").textContent = `Chưa gửi được: ${err.message}`;
+      $("#sendMsg").textContent = err.status
+        ? `Chưa gửi được · ${err.message}`
+        : "Chưa nhận được phản hồi từ máy chủ. Hãy thử gửi lại.";
     }
   } finally {
     if (app.token === token) { sending = false; syncActions(); }
@@ -978,9 +984,7 @@ async function loadMachines() {
 }
 
 function machineChanged() {
-  const { w, h } = workArea();
-  form.widthMm.max = Math.max(w, 150);
-  form.heightMm.max = Math.max(h, 150);
+  updateSizeLimits();
   if (!sending && !pendingSend) schedulePreview({ keepSubmission: true });
 }
 
@@ -995,7 +999,7 @@ function renderMachinePick() {
     <label>Máy nhận lệnh
       <select id="machineSelect">
         <option value="" disabled ${app.selectedMachine ? "" : "selected"}>Chọn máy nhận</option>
-        ${app.machines.map((m) => `<option value="${esc(m.id)}" ${app.selectedMachine === m.id ? "selected" : ""}>${esc(m.name)} · ${esc(m.id)} (${m.online ? "Online" : "Offline"})</option>`).join("")}
+        ${app.machines.map((m) => `<option value="${esc(m.id)}" ${app.selectedMachine === m.id ? "selected" : ""}>${esc(m.name)} · ${esc(m.id)} (${m.online ? "Có kết nối" : "Mất kết nối"})</option>`).join("")}
       </select>
     </label>
     <div id="machineInfo"></div>`;
@@ -1105,7 +1109,7 @@ function jobRow(j) {
     <td class="col-name"><button class="job-name" type="button" data-details="${j.id}">${esc(j.drawing_name)}</button></td>
     <td class="col-mach">${esc(j.machine_name)}</td>
     <td class="col-user">${esc(j.username)}</td>
-    <td class="col-status">${badge(j.status)}${jobNotice(j) ? `<span class="status-subnote">${esc(jobNotice(j))}</span>` : ""}</td>
+    <td class="col-status">${badge(j.cancel_requested ? "CANCEL_REQUESTED" : j.status)}${jobNotice(j) ? `<span class="status-subnote">${esc(jobNotice(j))}</span>` : ""}</td>
     <td class="col-progress"><div class="bar"><span style="width:${progress}%" class="${progress >= 100 ? "bar-complete" : ""}"></span></div><small class="tabular-nums progress-pct-label">${progress}%</small></td>
     <td class="col-time"><small class="tabular-nums">${formatDate(j.created_at)}</small></td>
     <td class="col-actions"><div class="job-actions">${actions}</div></td>
@@ -1145,20 +1149,33 @@ function formatFullDateTime(value) {
 }
 
 let detailsRequest = 0;
-async function openJobDetails(id) {
+let detailsState = "";
+
+function jobDetailsState(job) {
+  return `${job.status}:${job.cancel_requested}:${jobNotice(job)}`;
+}
+
+function openJobDetails(id) {
+  jobDetails.dataset.jobId = id;
+  detailsState = "";
+  $("#jobDetailsTitle").textContent = `Phiên vẽ #${id}`;
+  $("#jobDetailsBody").textContent = "Đang tải chi tiết…";
+  jobDetails.showModal();
+  loadJobDetails(id);
+}
+
+async function loadJobDetails(id) {
   const request = ++detailsRequest;
   const body = $("#jobDetailsBody");
-  $("#jobDetailsTitle").textContent = `Phiên vẽ #${id}`;
-  body.textContent = "Đang tải chi tiết…";
-  jobDetails.showModal();
   try {
     const { job, events } = await api(`/jobs/${id}`);
     if (request !== detailsRequest || !jobDetails.open) return;
+    detailsState = jobDetailsState(job);
     body.innerHTML = `
       <div class="job-meta-card">
         <div class="job-meta-header">
           <h3 class="job-meta-title">${esc(job.drawing_name)}</h3>
-          ${badge(job.status)}
+          ${badge(job.cancel_requested ? "CANCEL_REQUESTED" : job.status)}
         </div>
         <div class="job-meta-grid">
           <div class="job-meta-item">
@@ -1336,6 +1353,7 @@ function refreshJobViews() {
   refreshTimer = setTimeout(() => {
     if (token !== app.token) return;
     refreshTrackedJob().catch((err) => toast(err.message, "err"));
+    if (jobDetails.open) loadJobDetails(jobDetails.dataset.jobId);
     if (!$("#tab-jobs").classList.contains("hidden")) loadJobs().catch((err) => toast(err.message, "err"));
   }, 180);
 }
@@ -1357,7 +1375,7 @@ function connectWs() {
   app.ws = ws;
   ws.onclose = () => {
     if (app.ws !== ws) return;
-    setConnection(false, "Mất đồng bộ");
+    setConnection(false, "Mất cập nhật trực tiếp");
     for (const button of jobsBody.querySelectorAll("[data-act]:not(.danger)")) button.disabled = true;
     if (app.token) setTimeout(() => {
       if (app.token && app.ws === ws) connectWs();
@@ -1367,15 +1385,21 @@ function connectWs() {
     if (app.ws !== ws) return;
     const { type, data } = JSON.parse(ev.data);
     if (type === "hello") {
-      setConnection(true, "Đang đồng bộ");
+      setConnection(true, "Cập nhật trực tiếp");
       loadMachines().catch((err) => toast(err.message, "err"));
       refreshJobViews();
       if (!$("#tab-admin").classList.contains("hidden")) loadAdmin().catch((err) => toast(err.message, "err"));
     }
     if (type === "machine.status") onMachineStatus(data);
-    if (type === "queue.changed" && (data.machineId === app.selectedMachine
-      || data.machineId === (sentJob || activeJob)?.machine_id
-      || !$("#tab-jobs").classList.contains("hidden"))) refreshJobViews();
+    if (type === "queue.changed") {
+      const machine = app.machines.find((item) => item.id === data.machineId);
+      if (machine && Number.isInteger(data.queued)) {
+        machine.queued = data.queued;
+        if (!$("#tab-machines").classList.contains("hidden")) renderMachineCards();
+      }
+      if (data.machineId === app.selectedMachine || data.machineId === (sentJob || activeJob)?.machine_id
+          || !$("#tab-jobs").classList.contains("hidden")) refreshJobViews();
+    }
     if (type === "job.status") onJobStatus(data);
     if (type === "job.completed") toast(`Phiên #${data.id} (${data.drawing_name}) đã vẽ xong`, "ok", `job-${data.id}-completed`);
     if (type === "job.failed") toast(`Phiên #${data.id} lỗi: ${data.error}`, "err", `job-${data.id}-failed`);
@@ -1385,6 +1409,8 @@ function connectWs() {
 function onMachineStatus(m) {
   const i = app.machines.findIndex((x) => x.id === m.id);
   if (i >= 0) app.machines[i] = { ...app.machines[i], ...m };
+  const option = [...($("#machineSelect")?.options ?? [])].find((item) => item.value === m.id);
+  if (option) option.textContent = `${m.name} · ${m.id} (${m.online ? "Có kết nối" : "Mất kết nối"})`;
   renderMachineInfo(); renderMachineCards();
   syncActions();
   if (m.state === "OFFLINE") toast(`Máy ${m.name} mất kết nối`, "warn");
@@ -1400,6 +1426,13 @@ function onJobStatus(j) {
     trackingReady = true;
     if (sentJob?.id === j.id) sentJob = j;
     activeJob = j;
+  }
+  if (jobDetails.open && Number(jobDetails.dataset.jobId) === j.id) {
+    const state = jobDetailsState(j);
+    if (state !== detailsState) {
+      detailsState = state;
+      loadJobDetails(j.id);
+    }
   }
   renderActiveJobBar();
   if (!replaceJobRow(j) && !$("#tab-jobs").classList.contains("hidden")) loadJobs().catch((err) => toast(err.message, "err"));

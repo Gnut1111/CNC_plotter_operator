@@ -30,6 +30,11 @@ function logEvent(jobId, event, detail = null) {
   db.prepare("INSERT INTO job_events (job_id, event, detail) VALUES (?, ?, ?)").run(jobId, event, detail);
 }
 
+function emitQueueChanged(machineId) {
+  const { queued } = db.prepare("SELECT COUNT(*) AS queued FROM jobs WHERE machine_id = ? AND status = 'QUEUED'").get(machineId);
+  realtime.emit("queue.changed", { machineId, queued });
+}
+
 /** Cập nhật trạng thái phiên + ghi lịch sử + đẩy sự kiện realtime */
 function setJob(jobId, fields, event) {
   const keys = Object.keys(fields);
@@ -51,9 +56,7 @@ function setJob(jobId, fields, event) {
   realtime.emit("job.status", job, job.user_id);
   if (job.status === "COMPLETED") realtime.emit("job.completed", job, job.user_id);
   if (job.status === "FAILED") realtime.emit("job.failed", job, job.user_id);
-  if (FINAL.includes(job.status)) {
-    realtime.emit("queue.changed", { machineId: job.machine_id });
-  }
+  if (job.status === "SENDING" || FINAL.includes(job.status)) emitQueueChanged(job.machine_id);
   return job;
 }
 
@@ -74,6 +77,7 @@ function enqueue({ drawingId, machineId, userId, requestKey }) {
   logEvent(jobId, "QUEUED");
   const job = getJob(jobId);
   realtime.emit("job.status", job, userId);
+  emitQueueChanged(machineId);
   tryDispatch(machineId);
   return getJob(jobId);
 }
