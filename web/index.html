@@ -85,7 +85,7 @@
 
         <div class="grid-draw">
           <!-- Main Left Column: Preview Viewport -->
-          <section class="draw-viewport card" aria-labelledby="previewTitle">
+          <section class="draw-viewport card" aria-label="Xem trước bản vẽ">
             <div class="viewport-header">
               <div class="source-picker">
                 <input id="sourceFile" class="visually-hidden" type="file" form="convertForm" name="image" accept="image/png,image/jpeg" aria-describedby="fileInfo" />
@@ -96,11 +96,13 @@
                 <div class="segmented" role="group" aria-label="Chế độ xem">
                   <button type="button" id="pathsView" aria-pressed="true" disabled>Đường vẽ</button>
                   <button type="button" id="imageView" aria-pressed="false" disabled>Ảnh gốc</button>
+                  <button type="button" id="compareView" aria-pressed="false" disabled>So nét</button>
                 </div>
                 <label class="check travel-toggle">
                   <input type="checkbox" id="showTravel" disabled />
-                  <span>Đường chạy không</span>
+                  <span>Đường nhấc bút</span>
                 </label>
+                <button type="button" id="simulateBtn" class="small" aria-expanded="false" aria-controls="playbackControls" disabled>Mô phỏng</button>
               </div>
             </div>
 
@@ -112,8 +114,15 @@
               <div id="emptyPreview" class="empty-state">
                 <span class="empty-glyph" aria-hidden="true">+</span>
                 <h3>Chưa có ảnh đầu vào</h3>
-                <p>Bấm Chọn ảnh hoặc kéo thả file ảnh PNG/JPG vào bàn vẽ để tạo đường chạy dao.</p>
+                <p>Chọn hoặc kéo thả ảnh PNG/JPG để tạo đường vẽ.</p>
               </div>
+            </div>
+
+            <div id="playbackControls" class="playback-controls" hidden>
+              <button type="button" id="playbackBtn" class="small">Phát</button>
+              <input id="playbackPosition" type="range" min="0" max="1000" value="0" aria-label="Vị trí mô phỏng theo quãng đường" />
+              <span id="playbackStatus" class="tabular-nums"></span>
+              <p>Phát nhanh G-code trên web. Máy CNC không di chuyển.</p>
             </div>
 
             <!-- Viewport Footer: Status & Metrics -->
@@ -123,6 +132,7 @@
                 <button type="button" id="retryPreview" class="small ghost hidden">Thử lại</button>
               </div>
               <div id="stats" class="preview-stats tabular-nums" aria-live="polite"></div>
+              <p id="compareLegend" class="compare-legend" hidden>Nét xanh là đường bút. Ảnh gốc nằm bên dưới.</p>
             </div>
 
             <!-- Active Job Quick Monitor (Appears when drawing job is active) -->

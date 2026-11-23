@@ -1,4 +1,4 @@
-import { paintPreview, readMoves } from "./preview.js";
+import { paintPreview, playbackPosition, readMoves } from "./preview.js";
 
 // Pixel2Plot Operator — web client (ES module thuần, chạy thẳng trên trình duyệt)
 const $ = (s) => document.querySelector(s);
@@ -98,6 +98,7 @@ function showTab(name) {
   if (name === "machines") loadMachines().catch((err) => toast(err.message, "err"));
   if (name === "admin") loadAdmin().catch((err) => toast(err.message, "err"));
   if (name === "draw") drawPreview();
+  else pausePlayback();
 }
 $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
@@ -116,7 +117,9 @@ const METHOD_VI = { otsu: "Tự động (Otsu)", adaptive: "Thích nghi", fixed:
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 let file, original, originalUrl, preview, displayed, previewTimer, previewRequest, tuneRequest;
 const TUNE_LABELS = { fast: "Nhanh", detail: "Chi tiết" };
-let revision = 0, candidates = [], savedDrawingId, sentJob, activeJob = null, sending = false, showImage = false;
+let revision = 0, candidates = [], savedDrawingId, sentJob, activeJob = null, sending = false, view = "paths";
+const playback = { open: false, progress: 0, frame: null };
+const PLAYBACK_MS = 12000;
 
 function workArea() {
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
@@ -146,10 +149,36 @@ function uploadData(params, machineId) {
   return fd;
 }
 
-function selectView(image) {
-  showImage = image;
+function selectView(next) {
+  closePlayback();
+  view = next;
   drawPreview();
   syncActions();
+}
+
+function pausePlayback() {
+  if (playback.frame !== null) cancelAnimationFrame(playback.frame);
+  playback.frame = null;
+  $("#playbackBtn").textContent = playback.progress === 1 ? "Phát lại" : playback.progress ? "Tiếp tục" : "Phát";
+}
+
+function closePlayback() {
+  pausePlayback();
+  playback.open = false;
+  playback.progress = 0;
+}
+
+function playPlayback() {
+  if (playback.progress === 1) playback.progress = 0;
+  const start = performance.now() - playback.progress * PLAYBACK_MS;
+  const advance = (now) => {
+    playback.progress = Math.min(1, Math.max(0, (now - start) / PLAYBACK_MS));
+    drawPreview();
+    if (playback.progress === 1) pausePlayback();
+    else playback.frame = requestAnimationFrame(advance);
+  };
+  $("#playbackBtn").textContent = "Tạm dừng";
+  playback.frame = requestAnimationFrame(advance);
 }
 
 function drawPreview() {
@@ -158,14 +187,23 @@ function drawPreview() {
     w: Math.min(+form.widthMm.value || area.w, area.w),
     h: Math.min(+form.heightMm.value || area.h, area.h),
   };
-  paintPreview(canvas, { area, size, image: original, preview: displayed, showImage, showTravel: $("#showTravel").checked });
+  const head = playback.open ? playbackPosition(preview.moves, playback.progress) : null;
+  const showTravel = view === "paths" && $("#showTravel").checked;
+  paintPreview(canvas, { area, size, image: original, preview: displayed, view, head, showTravel });
+  if (head) {
+    const percent = Math.floor(playback.progress * 100);
+    const state = playback.progress === 1 ? "Đã về gốc" : head.ink ? "Bút đang vẽ" : "Bút nhấc";
+    $("#playbackPosition").value = Math.round(playback.progress * 1000);
+    const status = `${percent}% · ${state}`;
+    if ($("#playbackStatus").textContent !== status) $("#playbackStatus").textContent = status;
+    return;
+  }
   const hasFile = Boolean(file);
   const emptyEl = $("#emptyPreview");
   if (emptyEl) {
     emptyEl.hidden = hasFile;
     emptyEl.classList.toggle("hidden", hasFile);
   }
-  canvas.setAttribute("aria-label", showImage ? "Ảnh gốc trong vùng vẽ" : "Đường vẽ theo tọa độ máy");
 }
 
 function updateStepper() {
@@ -210,9 +248,19 @@ function updateStepGuide() {
 function syncActions() {
   $("#pathsView").disabled = !file;
   $("#imageView").disabled = !original?.naturalWidth;
-  $("#pathsView").setAttribute("aria-pressed", String(!showImage));
-  $("#imageView").setAttribute("aria-pressed", String(showImage));
-  $("#showTravel").disabled = showImage || !displayed;
+  $("#compareView").disabled = !displayed || !original?.naturalWidth;
+  for (const [id, mode] of [["pathsView", "paths"], ["imageView", "image"], ["compareView", "compare"]]) {
+    $("#" + id).setAttribute("aria-pressed", String(!playback.open && view === mode));
+  }
+  $("#showTravel").disabled = view !== "paths" || !displayed;
+  $("#compareLegend").hidden = view !== "compare" || !displayed;
+  $("#simulateBtn").disabled = !playback.open && (!preview?.moves.distance || Boolean(tuneRequest) || sending);
+  $("#simulateBtn").setAttribute("aria-expanded", String(playback.open));
+  $("#simulateBtn").textContent = playback.open ? "Đóng mô phỏng" : "Mô phỏng";
+  $("#playbackControls").hidden = !playback.open;
+  canvas.setAttribute("aria-label", playback.open ? "Mô phỏng đường bút" : {
+    paths: "Đường vẽ theo tọa độ máy", image: "Ảnh gốc trong vùng vẽ", compare: "Đường bút chồng lên ảnh gốc",
+  }[view]);
   $("#downloadBtn").disabled = !preview;
   $("#gcodeDetails").classList.toggle("hidden", !preview);
 
@@ -301,8 +349,10 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
   previewRequest?.abort();
   previewRequest = null;
   if (!keepTuneResult) clearTuneResult();
+  closePlayback();
   preview = null;
   if (!keepImage || !form.checkValidity()) displayed = null;
+  if (!displayed && view === "compare") view = "paths";
   savedDrawingId = null;
   sentJob = null;
   $("#stats").textContent = "";
@@ -354,6 +404,7 @@ async function runPreview(current) {
   } catch (err) {
     if (current !== revision || err.name === "AbortError") return;
     displayed = null;
+    if (view === "compare") view = "paths";
     drawPreview();
     $("#convertMsg").textContent = `Lỗi: ${err.message}. Thử đổi kiểu nét hoặc ảnh khác.`;
     $("#retryPreview").classList.remove("hidden");
@@ -383,7 +434,7 @@ function resetWorkspace() {
   fileInput.value = "";
   form.reset();
   updateFormLabels();
-  showImage = false;
+  view = "paths";
   sending = false;
   activeJob = null;
   sentJob = null;
@@ -401,7 +452,7 @@ function resetWorkspace() {
 function handleSelectedFile(newFile) {
   releaseOriginal();
   file = newFile;
-  showImage = false;
+  view = "paths";
   const error = $("#fileError");
   const message = file && (!["image/png", "image/jpeg"].includes(file.type)
     ? "Chọn ảnh định dạng PNG hoặc JPG."
@@ -464,8 +515,30 @@ $("#resetSettings").onclick = () => {
   updateFormLabels();
   schedulePreview({ delay: 0 });
 };
-$("#pathsView").onclick = () => selectView(false);
-$("#imageView").onclick = () => selectView(true);
+$("#pathsView").onclick = () => selectView("paths");
+$("#imageView").onclick = () => selectView("image");
+$("#compareView").onclick = () => selectView("compare");
+$("#simulateBtn").onclick = () => {
+  if (playback.open) return selectView("paths");
+  if (!preview?.moves.distance) return;
+  view = "paths";
+  playback.open = true;
+  syncActions();
+  drawPreview();
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) playPlayback();
+};
+$("#playbackBtn").onclick = () => {
+  if (playback.frame === null) playPlayback();
+  else pausePlayback();
+};
+$("#playbackPosition").oninput = (event) => {
+  playback.progress = Number(event.target.value) / 1000;
+  pausePlayback();
+  drawPreview();
+};
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pausePlayback();
+});
 $("#showTravel").onchange = drawPreview;
 $("#retryPreview").onclick = () => schedulePreview({ delay: 0 });
 new ResizeObserver(drawPreview).observe(canvas.parentElement);
@@ -547,7 +620,7 @@ function applyParams(params) {
   }
   if (form.invert && params.invert !== undefined) form.invert.value = String(params.invert);
   updateFormLabels();
-  showImage = false;
+  view = "paths";
 }
 
 $("#autoResult").addEventListener("click", (event) => {
