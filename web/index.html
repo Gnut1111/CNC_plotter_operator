@@ -7,60 +7,79 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- Auth View -->
+  <!-- Auth View (Dub.co + Clerk tactile standard) -->
   <section id="loginView" class="login hidden">
-    <form id="loginForm" class="card login-card">
-      <div class="login-brand">
-        <span class="brand-glyph">P2P</span>
-        <div class="brand-text">
-          <h1>Pixel2Plot</h1>
-          <p class="muted">Hệ thống điều khiển máy vẽ CNC</p>
+    <div class="login-wrapper">
+      <div class="login-backdrop-grid" aria-hidden="true"></div>
+      <form id="loginForm" class="card login-card">
+        <div class="login-brand">
+          <div class="brand-glyph" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+              <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+              <circle cx="11" cy="11" r="2"></circle>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <h1>Pixel2Plot</h1>
+            <p class="muted">Hệ thống điều khiển máy vẽ CNC</p>
+          </div>
         </div>
-      </div>
-      <label>Tên đăng nhập
-        <input name="username" autocomplete="username" placeholder="Tên đăng nhập" required />
-      </label>
-      <label>Mật khẩu
-        <input name="password" type="password" autocomplete="current-password" placeholder="Mật khẩu" required />
-      </label>
-      <button class="primary login-submit" type="submit">Đăng nhập</button>
-      <p id="loginError" class="error" role="alert"></p>
-      <div class="login-hint muted">
-        Tài khoản mẫu: <code>admin</code> / <code>admin123</code> hoặc <code>user</code> / <code>user123</code>
-      </div>
-    </form>
+        <div class="login-fields">
+          <label>Tên đăng nhập
+            <input name="username" autocomplete="username" placeholder="Tên đăng nhập" required />
+          </label>
+          <label>Mật khẩu
+            <input name="password" type="password" autocomplete="current-password" placeholder="Mật khẩu" required />
+          </label>
+        </div>
+        <button class="primary login-submit" type="submit">Đăng nhập</button>
+        <p id="loginError" class="error" role="alert"></p>
+        <div class="login-hint muted">
+          <span>Tài khoản mẫu:</span>
+          <div class="hint-pills">
+            <code>admin / admin123</code>
+            <code>user / user123</code>
+          </div>
+        </div>
+      </form>
+    </div>
   </section>
 
+  <!-- Main App View -->
   <section id="appView" class="hidden">
     <header class="topbar">
-      <div class="topbar-brand">
-        <span class="brand-logo">Pixel2Plot</span>
-        <span class="brand-divider">/</span>
-        <span class="brand-tag">Operator</span>
+      <div class="topbar-row-primary">
+        <div class="topbar-brand">
+          <span class="brand-logo">Pixel2Plot</span>
+          <span class="brand-divider">/</span>
+          <span class="brand-tag">Operator</span>
+        </div>
+        <div class="topbar-status">
+          <span id="wsDot" class="connection" title="Trạng thái kết nối WebSocket">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="wsLabel">Đang kết nối</span>
+          </span>
+          <span class="user-pill">
+            <span id="whoami" class="user-name"></span>
+          </span>
+          <button id="logoutBtn" class="small ghost">Đăng xuất</button>
+        </div>
       </div>
-      <nav id="tabs" aria-label="Điều hướng chính">
-        <button data-tab="draw" class="active">Vẽ mới</button>
-        <button data-tab="jobs">Phiên vẽ</button>
-        <button data-tab="machines">Máy vẽ</button>
-        <button data-tab="admin" class="admin-only">Quản trị</button>
-      </nav>
-      <span class="spacer"></span>
-      <div class="topbar-status">
-        <span id="wsDot" class="connection" title="Trạng thái kết nối WebSocket">
-          <span class="dot" aria-hidden="true"></span>
-          <span id="wsLabel">Đang kết nối</span>
-        </span>
-        <span class="user-pill">
-          <span id="whoami" class="user-name"></span>
-        </span>
-        <button id="logoutBtn" class="small ghost">Đăng xuất</button>
+      <div class="topbar-row-nav">
+        <nav id="tabs" aria-label="Điều hướng chính">
+          <button data-tab="draw" class="active">Vẽ mới</button>
+          <button data-tab="jobs">Phiên vẽ</button>
+          <button data-tab="machines">Máy vẽ</button>
+          <button data-tab="admin" class="admin-only">Quản trị</button>
+        </nav>
       </div>
     </header>
 
     <main>
       <!-- Tab 1: Drawing Workspace -->
       <div id="tab-draw" class="tab">
-        <!-- Workflow Guide Bar -->
+        <!-- Workflow Guide Bar (Slim 32px Dub Stepper) -->
         <nav class="workflow-stepper" aria-label="Quy trình vận hành">
           <div class="step-badge active" id="stepIndicator1">
             <span class="step-num">1</span>
@@ -69,12 +88,12 @@
           <span class="step-sep" aria-hidden="true">/</span>
           <div class="step-badge" id="stepIndicator2">
             <span class="step-num">2</span>
-            <span class="step-text">Kiểm tra đường vẽ</span>
+            <span class="step-text">Xem đường vẽ</span>
           </div>
           <span class="step-sep" aria-hidden="true">/</span>
           <div class="step-badge" id="stepIndicator3">
             <span class="step-num">3</span>
-            <span class="step-text">Chọn máy và gửi</span>
+            <span class="step-text">Chọn máy &amp; gửi</span>
           </div>
           <span class="step-sep" aria-hidden="true">/</span>
           <div class="step-badge" id="stepIndicator4">
@@ -108,11 +127,16 @@
 
             <p id="fileError" class="error banner-error" role="alert" hidden></p>
 
-            <!-- Canvas Viewport -->
+            <!-- Canvas Viewport with Blueprint Matched Recess -->
             <div class="preview-wrap" id="dropZone" tabindex="0" role="region" aria-label="Bàn vẽ">
               <canvas id="preview" aria-label="Bản xem trước theo tọa độ máy"></canvas>
               <div id="emptyPreview" class="empty-state">
-                <span class="empty-glyph" aria-hidden="true">+</span>
+                <div class="empty-glyph" aria-hidden="true">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                </div>
                 <h3>Chưa có ảnh đầu vào</h3>
                 <p>Chọn hoặc kéo thả ảnh PNG/JPG để tạo đường vẽ.</p>
               </div>
@@ -150,34 +174,9 @@
             </div>
           </section>
 
-          <!-- Right Sidebar Column: Machine Dispatch & Drawing Parameters -->
+          <!-- Right Sidebar Column: Natural Workflow (Settings on Top -> Machine Dispatch Sticky at Bottom) -->
           <aside class="draw-sidebar">
-            <!-- Machine Dispatch Panel -->
-            <section class="card dispatch-card" aria-labelledby="machineTitle">
-              <div class="pane-title">
-                <h2 id="machineTitle">Máy nhận và lệnh vẽ</h2>
-              </div>
-              <div class="pane-body">
-                <div id="machinePick" class="machine-pick-wrapper"></div>
-                <div class="dispatch-actions">
-                  <button type="button" class="primary send-btn" id="sendBtn" disabled>Gửi bản vẽ</button>
-                  <button type="button" class="ghost download-btn" id="downloadBtn" disabled title="Tải file G-code về máy">
-                    Tải G-code
-                  </button>
-                </div>
-                <div id="nextStepGuide" class="step-guide muted">
-                  <span id="guideText">Bước 1: Chọn ảnh để bắt đầu.</span>
-                </div>
-                <p id="sendMsg" class="send-status" role="status"></p>
-                <button type="button" id="showSentJob" class="small ghost hidden">Xem trong tab Phiên vẽ</button>
-                <details id="gcodeDetails" class="gcode-details hidden">
-                  <summary>Mã G-code</summary>
-                  <pre id="gcodeText" tabindex="0"></pre>
-                </details>
-              </div>
-            </section>
-
-            <!-- Settings Form Panel -->
+            <!-- Settings Form Panel (Top, independently scrollable) -->
             <section class="card settings-card" aria-labelledby="settingsTitle">
               <form id="convertForm">
                 <div class="pane-title pane-title-actions">
@@ -185,13 +184,17 @@
                   <button type="button" id="resetSettings" class="small ghost" title="Khôi phục thông số mặc định">Đặt lại</button>
                 </div>
                 <div class="pane-body">
-                  <!-- Essential Controls -->
-                  <div class="form-row">
-                    <label>Rộng tối đa (mm)
+                  <!-- Essential Controls with Figma UI3 Recessed Dimensions -->
+                  <div class="form-row size-row">
+                    <label class="input-field-recessed">
+                      <span class="field-prefix">Rộng</span>
                       <input type="number" name="widthMm" value="150" min="10" step="any" required />
+                      <span class="field-suffix">mm</span>
                     </label>
-                    <label>Cao tối đa (mm)
+                    <label class="input-field-recessed">
+                      <span class="field-prefix">Cao</span>
                       <input type="number" name="heightMm" value="150" min="10" step="any" required />
+                      <span class="field-suffix">mm</span>
                     </label>
                   </div>
                   <p class="muted option-hint">Giữ tỷ lệ ảnh và căn giữa vùng vẽ của máy.</p>
@@ -219,8 +222,8 @@
                   <div class="auto-tune-box">
                     <div class="form-row auto-tune-group" role="group" aria-label="Tìm cấu hình phù hợp">
                       <button type="button" id="autoBtn" class="auto-btn ghost" disabled>Gợi ý cấu hình</button>
-                      <button type="button" class="auto-btn ghost" data-tune="fast" disabled>Nhanh</button>
-                      <button type="button" class="auto-btn ghost" data-tune="detail" disabled>Chi tiết</button>
+                      <button type="button" class="auto-btn ghost" data-tune="fast" aria-label="Tự dò nhanh" disabled>Nhanh</button>
+                      <button type="button" class="auto-btn ghost" data-tune="detail" aria-label="Tự dò chi tiết" disabled>Chi tiết</button>
                     </div>
                     <div id="autoResult" class="auto-result" aria-live="polite"></div>
                   </div>
@@ -284,11 +287,51 @@
                         <input type="checkbox" name="despeckle" checked />
                         <span>Lọc đốm nhiễu nhỏ</span>
                       </label>
-                      <p class="option-hint muted">Máy HTrang · vẽ 900 mm/phút · chạy không theo rapid của Pico · nâng hạ bút bằng lệnh Z.</p>
+                      <div class="form-row">
+                        <label>Tốc độ vẽ (mm/phút)
+                          <input type="number" name="drawFeed" value="1500" min="100" max="10000" required />
+                        </label>
+                        <label>Chạy không (mm/phút)
+                          <input type="number" name="travelFeed" value="3000" min="100" max="10000" required />
+                        </label>
+                      </div>
+                      <div class="form-row">
+                        <label>Lệnh nâng bút
+                          <input name="penUp" value="M5" pattern="[A-Za-z0-9 .\-]{1,20}" required />
+                        </label>
+                        <label>Lệnh hạ bút
+                          <input name="penDown" value="M3 S90" pattern="[A-Za-z0-9 .\-]{1,20}" required />
+                        </label>
+                      </div>
                     </div>
                   </details>
                 </div>
               </form>
+            </section>
+
+            <!-- Machine Dispatch Panel (Sticky / Pinned at bottom) -->
+            <section class="card dispatch-card" aria-labelledby="machineTitle">
+              <div class="pane-title">
+                <h2 id="machineTitle">Máy nhận và lệnh vẽ</h2>
+              </div>
+              <div class="pane-body">
+                <div id="machinePick" class="machine-pick-wrapper"></div>
+                <div class="dispatch-actions">
+                  <button type="button" class="primary send-btn" id="sendBtn" disabled>Gửi bản vẽ</button>
+                  <button type="button" class="ghost download-btn" id="downloadBtn" disabled title="Tải file G-code về máy">
+                    Tải G-code
+                  </button>
+                </div>
+                <div id="nextStepGuide" class="step-guide muted">
+                  <span id="guideText">Bước 1: Chọn ảnh để bắt đầu.</span>
+                </div>
+                <p id="sendMsg" class="send-status" role="status"></p>
+                <button type="button" id="showSentJob" class="small ghost hidden">Xem trong tab Phiên vẽ</button>
+                <details id="gcodeDetails" class="gcode-details hidden">
+                  <summary>Mã G-code</summary>
+                  <pre id="gcodeText" tabindex="0"></pre>
+                </details>
+              </div>
             </section>
           </aside>
         </div>
@@ -414,7 +457,7 @@
     </main>
   </section>
 
-  <!-- Job Details Modal Dialog -->
+  <!-- Job Details Modal Dialog (Dub/Clerk Vertical Timeline) -->
   <dialog id="jobDetails" aria-labelledby="jobDetailsTitle">
     <div class="dialog-header">
       <h2 id="jobDetailsTitle">Chi tiết phiên vẽ</h2>
@@ -423,7 +466,7 @@
     <div id="jobDetailsBody" class="dialog-body" role="status"></div>
   </dialog>
 
-  <!-- Notification Toast UI -->
+  <!-- Notification Toast UI (Sonner / Dub Standard) -->
   <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
   <script type="module" src="app.js"></script>

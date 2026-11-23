@@ -36,12 +36,32 @@ async function api(path, opts = {}) {
 }
 
 // ---------------- Notification UI ----------------
-function toast(text, kind = "") {
+const recentToasts = new Map();
+
+function toast(text, kind = "", key = null) {
+  const toastKey = key || `${kind}:${text}`;
+  const now = Date.now();
+  if (recentToasts.has(toastKey) && (now - recentToasts.get(toastKey) < 3500)) {
+    return;
+  }
+  recentToasts.set(toastKey, now);
+  if (recentToasts.size > 50) {
+    for (const [k, t] of recentToasts) {
+      if (now - t > 10000) recentToasts.delete(k);
+    }
+  }
+
   const el = document.createElement("div");
-  el.className = `toast ${kind}`;
-  el.textContent = text;
+  el.className = `toast ${kind}`.trim();
+  const dot = document.createElement("span");
+  dot.className = "toast-dot";
+  dot.setAttribute("aria-hidden", "true");
+  const msg = document.createElement("span");
+  msg.className = "toast-text";
+  msg.textContent = text;
+  el.append(dot, msg);
   $("#toasts").append(el);
-  setTimeout(() => el.remove(), 4500);
+  setTimeout(() => el.remove(), 4200);
 }
 
 // ---------------- Auth View ----------------
@@ -138,6 +158,10 @@ function readParams() {
   if (form.hatchRatio && form.hatchRatio.value !== "") p.hatchRatio = +form.hatchRatio.value;
   if (form.fillStrategy) p.fillStrategy = form.fillStrategy.value;
   if (form.rasterPx && form.rasterPx.value !== "") p.rasterPx = +form.rasterPx.value;
+  if (form.drawFeed && form.drawFeed.value !== "") p.drawFeed = +form.drawFeed.value;
+  if (form.travelFeed && form.travelFeed.value !== "") p.travelFeed = +form.travelFeed.value;
+  if (form.penUp && form.penUp.value !== "") p.penUp = form.penUp.value;
+  if (form.penDown && form.penDown.value !== "") p.penDown = form.penDown.value;
   return p;
 }
 
@@ -619,6 +643,10 @@ function applyParams(params) {
     form.threshold.value = params.threshold;
   }
   if (form.invert && params.invert !== undefined) form.invert.value = String(params.invert);
+  if (form.drawFeed && params.drawFeed !== undefined) form.drawFeed.value = params.drawFeed;
+  if (form.travelFeed && params.travelFeed !== undefined) form.travelFeed.value = params.travelFeed;
+  if (form.penUp && params.penUp !== undefined) form.penUp.value = params.penUp;
+  if (form.penDown && params.penDown !== undefined) form.penDown.value = params.penDown;
   updateFormLabels();
   view = "paths";
 }
@@ -699,7 +727,7 @@ async function loadMachines() {
   app.machines = machines;
   if (!machines.some((m) => m.id === app.selectedMachine)) {
     const online = machines.filter((m) => m.online);
-    app.selectedMachine = (online.length === 1 ? online[0] : machines.length === 1 ? machines[0] : null)?.id ?? null;
+    app.selectedMachine = (online.length === 1 ? online[0] : machines.find((m) => m.id === "sim-01") || machines[0] || null)?.id ?? null;
   }
   renderMachinePick();
   renderMachineCards();
@@ -792,6 +820,7 @@ function jobRow(j) {
     j.status === "DRAWING" && btn("pause", "Tạm dừng"),
     j.status === "PAUSED" && btn("resume", "Tiếp tục"),
     !["COMPLETED", "CANCELLED", "FAILED"].includes(j.status) && btn("cancel", "Hủy", "danger"),
+    `<button class="small ghost btn-detail" type="button" data-details="${j.id}">Chi tiết</button>`,
   ].filter(Boolean).join(" ");
   const progress = Number(j.progress) || 0;
   return `<tr id="job-${j.id}">
@@ -810,6 +839,30 @@ function formatDate(value) {
   return new Date(value.endsWith("Z") ? value : value + "Z").toLocaleString("vi-VN");
 }
 
+const EVENT_VI = {
+  QUEUED: "Đã vào hàng đợi",
+  FILE_SENT: "Đã gửi dữ liệu G-code",
+  FILE_OK: "Máy nhận file thành công",
+  JOB_READY: "Sẵn sàng vẽ",
+  JOB_START: "Bắt đầu vẽ",
+  JOB_DONE: "Vẽ hoàn thành",
+  JOB_FAILED: "Lỗi trong quá trình vẽ",
+  PAUSED: "Đã tạm dừng",
+  RESUMED: "Đã tiếp tục vẽ",
+  CANCELLED: "Đã hủy phiên vẽ",
+};
+
+function formatTimeOnly(value) {
+  const d = new Date(value.endsWith("Z") ? value : value + "Z");
+  return d.toLocaleTimeString("vi-VN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function formatFullDateTime(value) {
+  const d = new Date(value.endsWith("Z") ? value : value + "Z");
+  return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }) + " lúc " +
+         d.toLocaleTimeString("vi-VN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 let detailsRequest = 0;
 async function openJobDetails(id) {
   const request = ++detailsRequest;
@@ -821,18 +874,45 @@ async function openJobDetails(id) {
     const { job, events } = await api(`/jobs/${id}`);
     if (request !== detailsRequest || !jobDetails.open) return;
     body.innerHTML = `
-      <div style="margin-bottom:10px;">
-        <h3 style="font-size:14px;margin-bottom:4px;">${esc(job.drawing_name)}</h3>
-        <div style="display:flex;gap:6px;align-items:center;">
+      <div class="job-meta-card">
+        <div class="job-meta-header">
+          <h3 class="job-meta-title">${esc(job.drawing_name)}</h3>
           ${badge(job.status)}
-          <span class="muted">${esc(job.machine_name)} · Người gửi: ${esc(job.username)}</span>
+        </div>
+        <div class="job-meta-grid">
+          <div class="job-meta-item">
+            <span class="meta-label">Máy vẽ:</span>
+            <span class="meta-val">${esc(job.machine_name)}</span>
+          </div>
+          <div class="job-meta-item">
+            <span class="meta-label">Người gửi:</span>
+            <span class="meta-val">${esc(job.username)}</span>
+          </div>
+          <div class="job-meta-item">
+            <span class="meta-label">Tạo lúc:</span>
+            <span class="meta-val tabular-nums">${formatFullDateTime(job.created_at)}</span>
+          </div>
         </div>
       </div>
-      <p class="muted" style="font-size:11px;">Tạo lúc: <span class="tabular-nums">${formatDate(job.created_at)}</span></p>
-      <h3 style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;">Nhật ký phiên</h3>
-      ${events.length ? `<ol class="job-events">${events.map((event) => `<li><time class="tabular-nums">${formatDate(event.created_at)}</time>
-        <span>${esc(STATUS_VI[event.event] || event.event)}${event.detail ? ` · ${esc(event.detail)}` : ""}</span></li>`).join("")}</ol>`
-      : '<p class="muted">Chưa có sự kiện ghi nhận.</p>'}`;
+      <div class="job-timeline-wrap">
+        <h3 class="timeline-title">Nhật ký phiên</h3>
+        ${events.length ? `
+          <ol class="job-events job-timeline">
+            ${events.map((event) => `
+              <li class="timeline-item">
+                <span class="timeline-bullet" aria-hidden="true"></span>
+                <time class="timeline-time tabular-nums">${formatTimeOnly(event.created_at)}</time>
+                <div class="timeline-desc-wrap">
+                  <span class="timeline-desc">${esc(EVENT_VI[event.event] || STATUS_VI[event.event] || event.event)}</span>
+                  ${event.event ? `<code class="timeline-code">${esc(event.event)}</code>` : ""}
+                  ${event.detail ? `<span class="timeline-detail">${esc(event.detail)}</span>` : ""}
+                </div>
+              </li>
+            `).join("")}
+          </ol>
+        ` : '<p class="muted">Chưa có sự kiện ghi nhận.</p>'}
+      </div>
+    `;
   } catch (err) {
     if (request === detailsRequest && jobDetails.open) body.textContent = `Lỗi: ${err.message}`;
   }
@@ -936,6 +1016,14 @@ function setConnection(connected, label) {
 }
 
 function connectWs(reconnecting = false) {
+  if (app.ws) {
+    try {
+      app.ws.onclose = null;
+      app.ws.onmessage = null;
+      app.ws.close();
+    } catch (_) {}
+    app.ws = null;
+  }
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(app.token)}`);
   app.ws = ws;
@@ -958,8 +1046,8 @@ function connectWs(reconnecting = false) {
     const { type, data } = JSON.parse(ev.data);
     if (type === "machine.status") onMachineStatus(data);
     if (type === "job.status") onJobStatus(data);
-    if (type === "job.completed") toast(`Phiên #${data.id} (${data.drawing_name}) đã vẽ xong`, "ok");
-    if (type === "job.failed") toast(`Phiên #${data.id} lỗi: ${data.error}`, "err");
+    if (type === "job.completed") toast(`Phiên #${data.id} (${data.drawing_name}) đã vẽ xong`, "ok", `job-${data.id}-completed`);
+    if (type === "job.failed") toast(`Phiên #${data.id} lỗi: ${data.error}`, "err", `job-${data.id}-failed`);
   };
 }
 
