@@ -1071,7 +1071,7 @@ main {
   }
 
   .preview-wrap {
-    height: clamp(230px, 68vw, 340px);
+    height: clamp(260px, calc(100vw - 36px), 380px);
   }
 
   .dispatch-actions {
@@ -1086,7 +1086,7 @@ main {
   }
 
   /* Compact Job List on Mobile */
-  .jobs-table :is(th, td):is(.col-id, .col-mach, .col-user, .col-time) {
+  .jobs-table :is(th, td):is(.col-mach, .col-user, .col-time, .col-progress) {
     display: none;
   }
   .jobs-table th, .jobs-table td {

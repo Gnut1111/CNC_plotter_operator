@@ -150,9 +150,7 @@
               <div class="pane-body">
                 <div id="machinePick" class="machine-pick-wrapper"></div>
                 <div class="dispatch-actions">
-                  <button type="button" class="primary send-btn" id="sendBtn" disabled>
-                    <span class="btn-text">Gửi bản vẽ</span>
-                  </button>
+                  <button type="button" class="primary send-btn" id="sendBtn" disabled>Gửi bản vẽ</button>
                   <button type="button" class="ghost download-btn" id="downloadBtn" disabled title="Tải file G-code về máy">
                     Tải G-code
                   </button>
@@ -180,10 +178,10 @@
                   <!-- Essential Controls -->
                   <div class="form-row">
                     <label>Rộng tối đa (mm)
-                      <input type="number" name="widthMm" value="120" min="1" max="120" step="any" required />
+                      <input type="number" name="widthMm" value="150" min="10" step="any" required />
                     </label>
                     <label>Cao tối đa (mm)
-                      <input type="number" name="heightMm" value="80" min="1" max="80" step="any" required />
+                      <input type="number" name="heightMm" value="150" min="10" step="any" required />
                     </label>
                   </div>
                   <p class="muted option-hint">Giữ tỷ lệ ảnh và căn giữa vùng vẽ của máy.</p>
@@ -207,9 +205,10 @@
                     </label>
                   </div>
 
-                  <!-- Auto-tune -->
+                  <!-- Auto-tune button -->
                   <div class="auto-tune-box">
-                    <div class="form-row" role="group" aria-label="Tìm cấu hình phù hợp">
+                    <div class="form-row auto-tune-group" role="group" aria-label="Tìm cấu hình phù hợp">
+                      <button type="button" id="autoBtn" class="auto-btn ghost" disabled>Gợi ý cấu hình</button>
                       <button type="button" class="auto-btn ghost" data-tune="fast" disabled>Nhanh</button>
                       <button type="button" class="auto-btn ghost" data-tune="detail" disabled>Chi tiết</button>
                     </div>

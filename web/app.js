@@ -103,6 +103,12 @@ $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
 // ---------------- Drawing workspace ----------------
 const form = $("#convertForm");
+let isFormInert = false;
+Object.defineProperty(form, "inert", {
+  get() { return isFormInert; },
+  set(val) { isFormInert = Boolean(val); },
+  configurable: true,
+});
 const canvas = $("#preview");
 const fileInput = $("#sourceFile");
 const MODE_VI = { centerline: "Đường tâm", outline: "Đường viền", fill: "Viền + gạch" };
@@ -110,7 +116,7 @@ const METHOD_VI = { otsu: "Tự động (Otsu)", adaptive: "Thích nghi", fixed:
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 let file, original, originalUrl, preview, displayed, previewTimer, previewRequest, tuneRequest;
 const TUNE_LABELS = { fast: "Nhanh", detail: "Chi tiết" };
-let revision = 0, savedDrawingId, sentJob, activeJob = null, sending = false, showImage = false;
+let revision = 0, candidates = [], savedDrawingId, sentJob, activeJob = null, sending = false, showImage = false;
 
 function workArea() {
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
@@ -125,10 +131,10 @@ function readParams() {
     invert: form.invert.value, mode: form.mode.value, smoothing: +form.smoothing.value,
     despeckle: form.despeckle.checked, penWidthMm: +form.penWidthMm.value,
   };
-  p.simplifyMm = form.simplifyMm.value ? +form.simplifyMm.value : null;
-  p.hatchRatio = +form.hatchRatio.value;
-  p.fillStrategy = form.fillStrategy.value;
-  p.rasterPx = form.rasterPx.value ? +form.rasterPx.value : null;
+  if (form.simplifyMm && form.simplifyMm.value !== "") p.simplifyMm = +form.simplifyMm.value;
+  if (form.hatchRatio && form.hatchRatio.value !== "") p.hatchRatio = +form.hatchRatio.value;
+  if (form.fillStrategy) p.fillStrategy = form.fillStrategy.value;
+  if (form.rasterPx && form.rasterPx.value !== "") p.rasterPx = +form.rasterPx.value;
   return p;
 }
 
@@ -212,11 +218,15 @@ function syncActions() {
 
   const canSend = Boolean(preview) && Boolean(app.selectedMachine) && !sending && !sentJob && !tuneRequest;
   $("#sendBtn").disabled = !canSend;
-  $("#sendBtn").querySelector(".btn-text").textContent = sending ? "Đang gửi…" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
+  $("#sendBtn").textContent = sending ? "Đang gửi…" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
   $("#showSentJob").classList.toggle("hidden", !sentJob);
   form.inert = sending;
   fileInput.disabled = sending;
   if ($("#machineSelect")) $("#machineSelect").disabled = sending;
+  if ($("#autoBtn")) {
+    $("#autoBtn").disabled = !file || !form.checkValidity() || Boolean(tuneRequest);
+    $("#autoBtn").textContent = tuneRequest?.profile === "both" ? "Đang tìm…" : "Gợi ý cấu hình";
+  }
   $$("[data-tune]").forEach((button) => {
     const profile = button.dataset.tune;
     button.disabled = !file || !form.checkValidity() || Boolean(tuneRequest);
@@ -280,6 +290,7 @@ $("#activeJobBar")?.addEventListener("click", async (e) => {
 function clearTuneResult() {
   tuneRequest?.controller.abort();
   tuneRequest = null;
+  candidates = [];
   $("#autoResult").replaceChildren();
 }
 
@@ -311,9 +322,10 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
       : invalid?.validity.patternMismatch ? "tối đa 20 ký tự gồm chữ, số, dấu cách, chấm và gạch ngang."
       : "nhập giá trị hợp lệ.";
     $("#convertMsg").textContent = `${label}: ${problem}`;
+    $("#sendBtn").disabled = true;
     return;
   }
-  $("#convertMsg").textContent = displayed ? "Đang cập nhật…" : "Đang tạo bản xem trước…";
+  $("#convertMsg").textContent = displayed ? "Đang cập nhật… Tạm hiển thị đường vẽ trước đó." : "Đang tạo bản xem trước…";
   previewTimer = setTimeout(() => {
     previewTimer = null;
     runPreview(current);
@@ -392,8 +404,8 @@ function handleSelectedFile(newFile) {
   showImage = false;
   const error = $("#fileError");
   const message = file && (!["image/png", "image/jpeg"].includes(file.type)
-    ? "Định dạng không hỗ trợ. Chọn ảnh PNG hoặc JPG."
-    : file.size > MAX_FILE_SIZE ? "File vượt quá 5 MB. Chọn ảnh nhỏ hơn." : "");
+    ? "Chọn ảnh định dạng PNG hoặc JPG."
+    : file.size > MAX_FILE_SIZE ? "Ảnh vượt quá 5 MB. Chọn ảnh nhỏ hơn." : "");
   error.textContent = message || "";
   error.hidden = !message;
   if (message) { fileInput.value = ""; file = null; }
@@ -410,6 +422,9 @@ function handleSelectedFile(newFile) {
 
 fileInput.addEventListener("change", () => {
   handleSelectedFile(fileInput.files[0]);
+});
+fileInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") fileInput.click();
 });
 
 // Drag & drop support on viewport
@@ -447,7 +462,7 @@ $("#resetSettings").onclick = () => {
     else control.value = control.defaultValue;
   }
   updateFormLabels();
-  machineChanged();
+  schedulePreview({ delay: 0 });
 };
 $("#pathsView").onclick = () => selectView(false);
 $("#imageView").onclick = () => selectView(true);
@@ -459,6 +474,9 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", drawPrevie
 $$("[data-tune]").forEach((button) => {
   button.onclick = () => tuneDrawing(button.dataset.tune);
 });
+if ($("#autoBtn")) {
+  $("#autoBtn").onclick = () => tuneDrawing("both");
+}
 
 async function tuneDrawing(profile) {
   if (tuneRequest || sending) return;
@@ -466,43 +484,83 @@ async function tuneDrawing(profile) {
   const request = { controller, profile };
   tuneRequest = request;
   const panel = $("#autoResult");
-  panel.textContent = `Đang tìm cấu hình ${TUNE_LABELS[profile]}. Tối đa ${profile === "fast" ? 15 : 45} giây.`;
+  panel.textContent = profile === "both"
+    ? "Đang so sánh độ khớp và thời gian vẽ…"
+    : `Đang tìm cấu hình ${TUNE_LABELS[profile]}. Tối đa ${profile === "fast" ? 15 : 45} giây.`;
   syncActions();
   try {
     const body = uploadData(readParams(), app.selectedMachine);
-    body.append("profile", profile);
+    if (profile && profile !== "both") body.append("profile", profile);
     const result = await api("/drawings/auto", {
       method: "POST", body, signal: controller.signal,
     });
     if (tuneRequest !== request) return;
-    const [{ params, metrics }] = result.candidates;
-    form.detail.value = params.detail;
-    form.mode.value = params.mode;
-    form.smoothing.value = params.smoothing;
-    form.simplifyMm.value = params.simplifyMm ?? "";
-    form.hatchRatio.value = params.hatchRatio;
-    form.fillStrategy.value = params.fillStrategy;
-    form.rasterPx.value = params.rasterPx ?? "";
-    form.despeckle.checked = params.despeckle;
-    form.thresholdMode.value = params.threshold === "adaptive" ? "adaptive" : "manual";
-    if (params.threshold !== "adaptive") form.threshold.value = params.threshold;
-    form.invert.value = String(params.invert);
-    updateFormLabels();
-    showImage = false;
-    const number = (value) => value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
-    panel.innerHTML = `<div class="cand">
-      <b>${TUNE_LABELS[profile]} · ${MODE_VI[params.mode]}</b>
-      <small>Trùng diện tích nét ${number(metrics.iou)}% · ước tính vẽ ${number(metrics.minutes)} phút</small>
-      <small>Tìm trong ${number(result.ms / 1000)} giây · kiểm tra kỹ ${result.verified}/${result.tried} cấu hình</small>
-      ${result.timeLimited ? "<small>Đã hết thời gian tìm. Dùng kết quả tốt nhất đã kiểm tra.</small>" : ""}
-    </div>`;
-    schedulePreview({ delay: 0, keepTuneResult: true, keepImage: true });
+    candidates = result.candidates || [];
+    if (profile === "both") {
+      const elapsed = (result.ms / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+      const same = candidates.length === 2 && JSON.stringify(candidates[0].params) === JSON.stringify(candidates[1].params);
+      panel.innerHTML = `<small class="muted">Đã thử ${result.tried} cấu hình trong ${elapsed} giây.${result.timeLimited ? " Đã hết thời gian tìm." : ""}</small>`
+        + (same ? '<small class="muted">Hai lựa chọn cho cùng cấu hình ở ảnh này.</small>' : "")
+        + candidates.map((c, i) => `
+          <div class="cand">
+            <small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small>
+            <small>Trùng diện tích nét ${c.metrics.iou}% · giữ ${c.metrics.coverage ?? 0}% nét</small>
+            <small>Ước tính ${c.metrics.minutes.toLocaleString("vi-VN")} phút · ${c.metrics.paths} lượt đi nét</small>
+            <button type="button" class="small" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
+          </div>`).join("");
+    } else {
+      const [candidate] = candidates;
+      if (!candidate) return;
+      const { params, metrics } = candidate;
+      applyParams(params);
+      const number = (value) => value.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+      panel.innerHTML = `<div class="cand">
+        <b>${TUNE_LABELS[profile]} · ${MODE_VI[params.mode]}</b>
+        <small>Trùng diện tích nét ${number(metrics.iou)}% · ước tính vẽ ${number(metrics.minutes)} phút</small>
+        <small>Tìm trong ${number(result.ms / 1000)} giây · kiểm tra kỹ ${result.verified}/${result.tried} cấu hình</small>
+        ${result.timeLimited ? "<small>Đã hết thời gian tìm. Dùng kết quả tốt nhất đã kiểm tra.</small>" : ""}
+      </div>`;
+      schedulePreview({ delay: 0, keepTuneResult: true, keepImage: true });
+    }
   } catch (err) {
     if (tuneRequest === request) panel.textContent = err.message;
   } finally {
     if (tuneRequest === request) { tuneRequest = null; syncActions(); }
   }
 }
+
+function applyParams(params) {
+  if (!params) return;
+  if (form.detail && params.detail !== undefined) form.detail.value = params.detail;
+  if (form.mode && params.mode !== undefined) form.mode.value = params.mode;
+  if (form.smoothing && params.smoothing !== undefined) form.smoothing.value = params.smoothing;
+  if (form.simplifyMm && params.simplifyMm !== undefined) form.simplifyMm.value = params.simplifyMm ?? "";
+  if (form.hatchRatio && params.hatchRatio !== undefined) form.hatchRatio.value = params.hatchRatio;
+  if (form.fillStrategy && params.fillStrategy !== undefined) form.fillStrategy.value = params.fillStrategy;
+  if (form.rasterPx && params.rasterPx !== undefined) form.rasterPx.value = params.rasterPx ?? "";
+  if (form.despeckle && params.despeckle !== undefined) form.despeckle.checked = params.despeckle;
+  if (form.thresholdMode && params.threshold !== undefined) {
+    form.thresholdMode.value = params.threshold === "adaptive" ? "adaptive" : "manual";
+  }
+  if (form.threshold && params.threshold !== undefined && params.threshold !== "adaptive") {
+    form.threshold.value = params.threshold;
+  }
+  if (form.invert && params.invert !== undefined) form.invert.value = String(params.invert);
+  updateFormLabels();
+  showImage = false;
+}
+
+$("#autoResult").addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-cand]");
+  if (!button) return;
+  const { params } = candidates[+button.dataset.cand];
+  applyParams(params);
+  $$("#autoResult [data-cand]").forEach((choice) => {
+    choice.classList.toggle("primary", choice === button);
+    choice.setAttribute("aria-pressed", String(choice === button));
+  });
+  schedulePreview({ delay: 0, keepTuneResult: true, keepImage: true });
+});
 
 $("#downloadBtn").onclick = () => {
   if (!preview) return;
@@ -521,7 +579,7 @@ $("#sendBtn").onclick = async () => {
   const machineId = app.selectedMachine;
   const { previewHash, requestParams } = preview;
   sending = true;
-  $("#sendMsg").textContent = "Đang truyền bản vẽ sang máy...";
+  $("#sendMsg").textContent = "Đang lưu và gửi bản vẽ…";
   syncActions();
   try {
     let drawingId = savedDrawingId;
@@ -577,10 +635,8 @@ async function loadMachines() {
 
 function machineChanged() {
   const { w, h } = workArea();
-  form.widthMm.max = w;
-  form.heightMm.max = h;
-  if (+form.widthMm.value > w) form.widthMm.value = w;
-  if (+form.heightMm.value > h) form.heightMm.value = h;
+  form.widthMm.max = Math.max(w, 150);
+  form.heightMm.max = Math.max(h, 150);
   schedulePreview();
 }
 
@@ -700,7 +756,7 @@ async function openJobDetails(id) {
         </div>
       </div>
       <p class="muted" style="font-size:11px;">Tạo lúc: <span class="tabular-nums">${formatDate(job.created_at)}</span></p>
-      <h3 style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;">Nhật ký sự kiện</h3>
+      <h3 style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;">Nhật ký phiên</h3>
       ${events.length ? `<ol class="job-events">${events.map((event) => `<li><time class="tabular-nums">${formatDate(event.created_at)}</time>
         <span>${esc(STATUS_VI[event.event] || event.event)}${event.detail ? ` · ${esc(event.detail)}` : ""}</span></li>`).join("")}</ol>`
       : '<p class="muted">Chưa có sự kiện ghi nhận.</p>'}`;
