@@ -11,7 +11,8 @@ Mọi API (trừ đăng nhập) cần header `Authorization: Bearer <JWT>`.
 ## Bản vẽ (Image Uploader / Converter / G-code Viewer)
 | Method | Path | Mô tả |
 |---|---|---|
-| POST | `/api/drawings` | multipart: `image` (PNG/JPG ≤ 5 MB), `params` (JSON), `machineId` (tùy chọn, lấy vùng vẽ). → `{drawing, gcode}`. Sai định dạng → 400, quá dung lượng → 413, không có nét → 422 |
+| POST | `/api/drawings` | multipart: `image` (PNG/JPG ≤ 5 MB), `params` (JSON), `machineId` (tùy chọn, lấy vùng vẽ), `previewHash` (tùy chọn, trả 409 nếu G-code khác bản đã xem). → `{drawing, gcode}`. Sai định dạng → 400, quá dung lượng → 413, không có nét → 422 |
+| POST | `/api/drawings/preview` | Như trên nhưng **không lưu**: trả `{gcode, params, stats, previewHash}` để cập nhật bản xem trước. |
 | POST | `/api/drawings/auto` | Như trên nhưng **không lưu**: thử ~36 bộ tham số, trả `{candidates: [{label, params, metrics}], reference, tried, ms}` — 3 phương án Chi tiết / Cân bằng / Nhanh |
 | GET | `/api/drawings` | Bản vẽ của tôi |
 | GET | `/api/drawings/:id/gcode` | File G-code |

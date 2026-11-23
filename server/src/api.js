@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { createHash, randomUUID } = require("node:crypto");
 const express = require("express");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
@@ -63,13 +64,30 @@ router.post("/drawings/auto", upload.single("image"), wrap(async (req, res) => {
   res.json(result);
 }));
 
-router.post("/drawings", upload.single("image"), wrap(async (req, res) => {
+async function convertUpload(req, res) {
   const result = await processUpload(req, res, convert);
+  if (!result) return null;
+  if (result.stats.paths) return result;
+  res.status(422).json({ error: "Không tìm thấy nét vẽ. Thử đổi cách tách nét hoặc đảo màu." });
+  return null;
+}
+
+const hashGcode = (gcode) => createHash("sha256").update(gcode).digest("hex");
+
+router.post("/drawings/preview", upload.single("image"), wrap(async (req, res) => {
+  const result = await convertUpload(req, res);
+  if (result) res.json({ ...result, previewHash: hashGcode(result.gcode) });
+}));
+
+router.post("/drawings", upload.single("image"), wrap(async (req, res) => {
+  const result = await convertUpload(req, res);
   if (!result) return;
   const { gcode, params: used, stats } = result;
-  if (stats.paths === 0) return res.status(422).json({ error: "Không tìm thấy nét vẽ nào — thử chỉnh ngưỡng hoặc đảo màu" });
 
-  const stamp = `${Date.now()}-${req.user.id}`;
+  if (req.body.previewHash !== undefined && req.body.previewHash !== hashGcode(gcode)) {
+    return res.status(409).json({ error: "Kết quả vẽ đã thay đổi. Kiểm tra bản xem trước rồi gửi lại." });
+  }
+  const stamp = randomUUID();
   const ext = req.file.mimetype === "image/png" ? ".png" : ".jpg";
   const imagePath = path.join(config.dataDir, "uploads", stamp + ext);
   const gcodePath = path.join(config.dataDir, "gcode", stamp + ".gcode");
