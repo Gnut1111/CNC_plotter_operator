@@ -78,6 +78,17 @@ $("#loginForm").addEventListener("submit", async (e) => {
   } catch (err) { $("#loginError").textContent = err.message; }
 });
 
+$$("[data-fill]").forEach((btn) => {
+  btn.onclick = () => {
+    const [u, p] = btn.dataset.fill.split(":");
+    const f = $("#loginForm");
+    if (f) {
+      f.username.value = u;
+      f.password.value = p;
+    }
+  };
+});
+
 function logout() {
   app.token = null; app.user = null;
   localStorage.removeItem("token"); localStorage.removeItem("user");
@@ -103,6 +114,8 @@ function enterApp() {
   $("#loginView").classList.add("hidden");
   $("#appView").classList.remove("hidden");
   $("#whoami").textContent = `${app.user.username} (${app.user.role === "admin" ? "Quản trị" : "Người dùng"})`;
+  const avatar = $("#userAvatar");
+  if (avatar) avatar.textContent = (app.user.username || "U")[0].toUpperCase();
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", app.user.role !== "admin"));
   connectWs();
   pendingSend = readPendingSend();
@@ -333,8 +346,15 @@ function updateStepper() {
 
 function updateStepGuide() {
   const guideText = $("#guideText");
+  const nextStepGuide = $("#nextStepGuide");
   if (!guideText) return;
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
+
+  if (sentJob) {
+    if (nextStepGuide) nextStepGuide.hidden = true;
+    return;
+  }
+  if (nextStepGuide) nextStepGuide.hidden = false;
 
   if (!file) {
     guideText.textContent = "Bước 1: Chọn ảnh PNG hoặc JPG để bắt đầu.";
@@ -548,10 +568,21 @@ function releaseOriginal() {
   originalUrl = null;
 }
 
+function updateSliderTrack(slider) {
+  if (!slider) return;
+  const min = Number(slider.min) || 0;
+  const max = Number(slider.max) || 100;
+  const val = Number(slider.value) || 0;
+  const pct = max > min ? ((val - min) / (max - min)) * 100 : 0;
+  slider.style.setProperty("--slider-pct", `${pct}%`);
+}
+
 function updateFormLabels() {
   $("#detailVal").textContent = form.detail.value;
   $("#thresholdVal").textContent = form.threshold.value;
   $("#thresholdRow").classList.toggle("hidden", form.thresholdMode.value !== "manual");
+  updateSliderTrack(form.detail);
+  updateSliderTrack(form.threshold);
 }
 
 function resetWorkspace() {
@@ -579,7 +610,17 @@ function resetWorkspace() {
 }
 
 function handleSelectedFile(newFile) {
-  if (!newFile || sending || pendingSend && file) return;
+  if (sending) return;
+  if (!newFile) {
+    releaseOriginal();
+    file = null;
+    closePlayback();
+    $("#fileInfo").textContent = "PNG hoặc JPG · tối đa 5 MB";
+    $("#fileError").hidden = true;
+    schedulePreview({ delay: 0 });
+    return;
+  }
+  if (pendingSend && file) return;
   const error = $("#fileError");
   const message = !["image/png", "image/jpeg"].includes(newFile.type)
     ? "Chọn ảnh định dạng PNG hoặc JPG."
@@ -704,15 +745,23 @@ async function tuneDrawing(profile) {
     if (profile === "both") {
       const elapsed = (result.ms / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
       const same = candidates.length === 2 && JSON.stringify(candidates[0].params) === JSON.stringify(candidates[1].params);
-      panel.innerHTML = `<small class="muted">Đã thử ${result.tried} cấu hình trong ${elapsed} giây.${result.timeLimited ? " Đã hết thời gian tìm." : ""}</small>`
+      panel.innerHTML = `<div class="auto-result-summary"><small class="muted">Đã thử ${result.tried} cấu hình trong ${elapsed} giây.${result.timeLimited ? " Đã hết thời gian." : ""}</small>`
         + (same ? '<small class="muted">Hai lựa chọn cho cùng cấu hình ở ảnh này.</small>' : "")
+        + `</div><div class="cand-grid">`
         + candidates.map((c, i) => `
           <div class="cand">
-            <small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small>
-            <small>Trùng nét mô phỏng ${c.metrics.iou}% · giữ ${c.metrics.coverage ?? 0}% nét</small>
-            <small>Ước tính ${c.metrics.minutes.toLocaleString("vi-VN")} phút · ${c.metrics.paths} lượt đi nét</small>
-            <button type="button" class="small" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
-          </div>`).join("");
+            <div class="cand-top">
+              <strong>${esc(c.label)}</strong>
+              <span class="cand-match">${c.metrics.iou}% khớp</span>
+            </div>
+            <div class="cand-info">
+              <small class="muted">${MODE_VI[c.params.mode]} · D:${c.params.detail} · S:${c.params.smoothing}</small>
+              <small class="muted">~${c.metrics.minutes.toLocaleString("vi-VN")}p · ${c.metrics.paths} nét</small>
+            </div>
+            <button type="button" class="small cand-apply-btn" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
+          </div>`).join("")
+        + `</div>`;
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     } else {
       const [candidate] = candidates;
       if (!candidate) { panel.textContent = "Chưa tìm được nét phù hợp. Kiểm tra ảnh gốc hoặc đổi ảnh."; return; }
@@ -809,11 +858,17 @@ $("#sendBtn").onclick = async () => {
     if (app.token !== token) return;
     rememberJob(job.id);
     setPendingSend(null);
-    sentJob = version !== jobVersion && activeJob?.id === job.id ? activeJob : job;
-    activeJob = sentJob;
-    trackingReady = liveConnected;
-    saveDraft();
-    $("#sendMsg").textContent = `Đã nhận phiên #${job.id} · ${job.machine_name}.`;
+    if (current === revision) {
+      sentJob = version !== jobVersion && activeJob?.id === job.id ? activeJob : job;
+      activeJob = sentJob;
+      trackingReady = liveConnected;
+      saveDraft();
+      $("#sendMsg").textContent = `Phiên #${job.id} đã vào hàng đợi · ${job.machine_name}.`;
+    } else {
+      activeJob = job;
+      trackingReady = liveConnected;
+      toast(`Phiên #${job.id} đã vào hàng đợi · ${job.machine_name}.`, "ok");
+    }
   } catch (err) {
     if (app.token !== token) return;
     if (pendingSend && (!err.status || err.status >= 500)) {
@@ -965,11 +1020,11 @@ function jobRow(j) {
   const progress = Number(j.progress) || 0;
   return `<tr id="job-${j.id}">
     <td class="col-id tabular-nums">${j.id}</td>
-    <td class="col-name"><button class="job-name" type="button" data-details="${j.id}">${esc(j.drawing_name)}</button><small class="job-ref">#${j.id} · ${esc(j.machine_name)}</small></td>
+    <td class="col-name"><button class="job-name" type="button" data-details="${j.id}">${esc(j.drawing_name)}</button></td>
     <td class="col-mach">${esc(j.machine_name)}</td>
     <td class="col-user">${esc(j.username)}</td>
     <td class="col-status">${badge(j.status)}${jobNotice(j) ? `<br/><small>${esc(jobNotice(j))}</small>` : ""}</td>
-    <td class="col-progress"><div class="bar"><span style="width:${progress}%"></span></div><small class="tabular-nums">${progress}%</small></td>
+    <td class="col-progress"><div class="bar"><span style="width:${progress}%" class="${progress >= 100 ? "bar-complete" : ""}"></span></div><small class="tabular-nums">${progress}%</small></td>
     <td class="col-time"><small class="tabular-nums">${formatDate(j.created_at)}</small></td>
     <td class="col-actions"><div class="job-actions">${actions}</div></td>
   </tr>`;
@@ -1270,5 +1325,9 @@ function onJobStatus(j) {
 }
 
 // ---------------- Boot ----------------
+$$("input[type=range]").forEach((r) => {
+  updateSliderTrack(r);
+  r.addEventListener("input", () => updateSliderTrack(r));
+});
 if (app.token && app.user) enterApp(); else logout();
 drawPreview();
