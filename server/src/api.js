@@ -7,7 +7,8 @@ const bcrypt = require("bcryptjs");
 const config = require("./config");
 const { db, newToken } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
-const { convert, autoTune, DEFAULTS } = require("./converter");
+const { convert, DEFAULTS } = require("./converter");
+const { tuneInWorker } = require("./tune-worker");
 const dispatcher = require("./dispatcher");
 const { publicMachine } = require("./statusService");
 
@@ -51,6 +52,7 @@ async function processUpload(req, res, fn) {
     const params = typeof req.body.params === "string" ? JSON.parse(req.body.params || "{}") : {};
     return await fn(req.file.buffer, params, workAreaOf(req.body.machineId));
   } catch (e) {
+    if (e.status) throw e;
     res.status(400).json({ error: `Không xử lý được ảnh: ${e.message}` });
     return null;
   }
@@ -58,7 +60,7 @@ async function processUpload(req, res, fn) {
 
 // Tự dò tham số: trả về các phương án (không lưu bản vẽ)
 router.post("/drawings/auto", upload.single("image"), wrap(async (req, res) => {
-  const result = await processUpload(req, res, autoTune);
+  const result = await processUpload(req, res, (image, params, area) => tuneInWorker(image, params, area, res));
   if (!result) return;
   if (!result.candidates.length) return res.status(422).json({ error: "Không tìm thấy nét vẽ nào trong ảnh" });
   res.json(result);

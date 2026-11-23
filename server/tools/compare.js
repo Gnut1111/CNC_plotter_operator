@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// So sánh trước/sau cho báo cáo: ảnh gốc | cấu hình mặc định | 3 phương án tự động
+// So sánh trước/sau cho báo cáo: ảnh gốc | cấu hình mặc định | 2 phương án tự động
 //   node tools/compare.js <ảnh1> [ảnh2 ...] --out <thư mục>
 // Kết quả: <tên>-compare.png cho từng ảnh + results.md (bảng số liệu)
 const fs = require("fs");

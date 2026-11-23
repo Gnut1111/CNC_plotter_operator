@@ -4,6 +4,7 @@
 // chấm điểm độ giống ảnh gốc (Chamfer, IoU) và tự dò bộ tham số tốt nhất (autoTune).
 const sharp = require("sharp");
 const { traceSkeleton } = require("./trace-paths");
+const { performance } = require("node:perf_hooks");
 
 const DEFAULTS = {
   widthMm: 150, // kích thước bản vẽ mong muốn (giữ tỉ lệ ảnh)
@@ -13,6 +14,8 @@ const DEFAULTS = {
   invert: "auto", // "auto" | true | false
   mode: "centerline", // "centerline" (đường tâm) | "outline" (đường viền) | "fill" (viền + tô gạch)
   smoothing: 1, // 0..3 vòng làm mượt Chaikin
+  simplifyMm: null, // null: theo mức chi tiết
+  hatchRatio: 0.9, // khoảng gạch theo bề rộng bút
   despeckle: true, // xóa đốm nhiễu nhỏ
   penWidthMm: 0.5, // bề rộng nét bút — dùng cho khoảng cách tô gạch và chấm điểm
   travelFeed: 3000, // mm/phút
@@ -40,6 +43,8 @@ function normalizeParams(input = {}, workArea) {
   else if (input.invert === false || input.invert === "false") p.invert = false;
   p.mode = ["outline", "fill"].includes(input.mode) ? input.mode : "centerline";
   p.smoothing = Math.round(num(input.smoothing, 0, 3, DEFAULTS.smoothing));
+  p.simplifyMm = num(input.simplifyMm, 0.03, 1, null);
+  p.hatchRatio = num(input.hatchRatio, 0.6, 1, DEFAULTS.hatchRatio);
   p.despeckle = !(input.despeckle === false || input.despeckle === "false");
   p.penWidthMm = num(input.penWidthMm, 0.1, 3, DEFAULTS.penWidthMm);
   p.travelFeed = num(input.travelFeed, 100, 10000, DEFAULTS.travelFeed);
@@ -290,6 +295,7 @@ function hatch({ binary, width, height }, spacing) {
   const rows = [];
   for (let yf = 1; yf < height - 1; yf += spacing) {
     const y = Math.round(yf);
+    if (y >= height) break;
     const runs = [];
     let x = 0;
     while (x < width) {
@@ -297,9 +303,18 @@ function hatch({ binary, width, height }, spacing) {
       if (x >= width) break;
       const x0 = x;
       while (x < width && binary[y * width + x]) x++;
-      if (x - 1 - x0 >= 1) runs.push({ y, x0, x1: x - 1, used: false });
+      if (x - 1 - x0 >= 1) runs.push({ y: yf, x0, x1: x - 1, used: false });
     }
     rows.push(runs);
+  }
+  function inside(x0, y0, x1, y1) {
+    const steps = Math.ceil(2 * Math.hypot(x1 - x0, y1 - y0));
+    for (let i = 1; i < steps; i++) {
+      const x = Math.round(x0 + (x1 - x0) * i / steps);
+      const y = Math.round(y0 + (y1 - y0) * i / steps);
+      if (!binary[y * width + x]) return false;
+    }
+    return true;
   }
   const maxJump = Math.max(2, spacing * 3);
   const paths = [];
@@ -311,11 +326,19 @@ function hatch({ binary, width, height }, spacing) {
       for (;;) {
         cur.used = true;
         const a = ltr ? cur.x0 : cur.x1, b = ltr ? cur.x1 : cur.x0;
-        path.push({ x: a, y: cur.y }, { x: b, y: cur.y });
+        path.push({ x: a + 0.5, y: cur.y + 0.5 }, { x: b + 0.5, y: cur.y + 0.5 });
         const next = rows[ri + 1]?.filter((n) => !n.used && n.x0 <= cur.x1 && n.x1 >= cur.x0)
           .map((n) => ({ n, jump: Math.abs((ltr ? n.x1 : n.x0) - b) }))
           .sort((u, v) => u.jump - v.jump)[0];
         if (!next || next.jump > maxJump) break;
+        const end = ltr ? next.n.x1 : next.n.x0;
+        if (!inside(b, cur.y, end, next.n.y)) {
+          // Turn via a shared column to avoid cutting across a concave edge.
+          const x = Math.min(Math.min(cur.x1, next.n.x1), Math.max(b, cur.x0, next.n.x0));
+          if (!inside(x, cur.y, x, next.n.y)) break;
+          if (x !== b) path.push({ x: x + 0.5, y: cur.y + 0.5 });
+          if (x !== end) path.push({ x: x + 0.5, y: next.n.y + 0.5 });
+        }
         cur = next.n; ri++; ltr = !ltr;
       }
       paths.push(path);
@@ -336,18 +359,19 @@ function simplify(points, tol) {
     }
     return (p.x - x) ** 2 + (p.y - y) ** 2;
   };
-  const out = [points[0]];
-  const rec = (s, e) => {
+  const keep = new Uint8Array(points.length);
+  keep[0] = keep[points.length - 1] = 1;
+  const pending = [[0, points.length - 1]];
+  while (pending.length) {
+    const [s, e] = pending.pop();
     let max = sq, idx = -1;
     for (let i = s + 1; i < e; i++) {
       const d = segDist(points[i], points[s], points[e]);
       if (d > max) { max = d; idx = i; }
     }
-    if (idx > -1) { rec(s, idx); out.push(points[idx]); rec(idx, e); }
-  };
-  rec(0, points.length - 1);
-  out.push(points[points.length - 1]);
-  return out;
+    if (idx !== -1) { keep[idx] = 1; pending.push([s, idx], [idx, e]); }
+  }
+  return points.filter((_, i) => keep[i]);
 }
 
 function chaikin(points, iterations) {
@@ -373,22 +397,38 @@ function length(points) {
 
 // Sắp xếp nét theo láng giềng gần nhất để giảm quãng chạy không
 function order(paths) {
-  const rest = [...paths];
   const out = [];
-  let cur = { x: 0, y: 0 };
-  while (rest.length) {
-    let best = 0, rev = false, bestD = Infinity;
-    rest.forEach((p, i) => {
-      const a = p[0], b = p[p.length - 1];
-      const da = Math.hypot(a.x - cur.x, a.y - cur.y);
-      const db = Math.hypot(b.x - cur.x, b.y - cur.y);
-      if (da < bestD) { bestD = da; best = i; rev = false; }
-      if (db < bestD) { bestD = db; best = i; rev = true; }
+  const rest = [...paths];
+  if (rest.length > 256) {
+    // Limit nearest-neighbor search to nearby bands on dense drawings.
+    const tile = ([p]) => {
+      const row = Math.floor(p.y / 10), column = Math.floor(p.x / 10);
+      return [row, row % 2 ? -column : column];
+    };
+    rest.sort((a, b) => {
+      const [rowA, colA] = tile(a), [rowB, colB] = tile(b);
+      return rowA - rowB || colA - colB;
     });
-    const [p] = rest.splice(best, 1);
-    if (rev) p.reverse();
-    out.push(p);
-    cur = p[p.length - 1];
+  }
+  let cur = { x: 0, y: 0 };
+  for (let start = 0; start < rest.length; start += 96) {
+    const end = rest.length <= 256 ? rest.length : Math.min(start + 96, rest.length);
+    for (let i = start; i < end; i++) {
+      let best = i, rev = false, bestD = Infinity;
+      for (let j = i; j < end; j++) {
+        const p = rest[j], a = p[0], b = p.at(-1);
+        const da = (a.x - cur.x) ** 2 + (a.y - cur.y) ** 2;
+        const db = (b.x - cur.x) ** 2 + (b.y - cur.y) ** 2;
+        if (da < bestD) { bestD = da; best = j; rev = false; }
+        if (db < bestD) { bestD = db; best = j; rev = true; }
+      }
+      const p = rest[best];
+      rest[best] = rest[i];
+      if (rev) p.reverse();
+      out.push(p);
+      cur = p.at(-1);
+    }
+    if (end === rest.length) break;
   }
   return out;
 }
@@ -407,8 +447,53 @@ function transformFor(w, h, p, workArea) {
   return { scale, w, h, offX: (workArea.width - w * scale) / 2, offY: (workArea.height - h * scale) / 2 };
 }
 
+// Reuse an existing junction as a continuous pen-down move. No connector is added.
+function joinCenterlines(paths) {
+  const ends = new Map();
+  const open = [], closed = [];
+  const key = ({ x, y }) => `${x},${y}`;
+  const vertex = (point) => {
+    const id = key(point);
+    if (!ends.has(id)) ends.set(id, { edges: [], next: 0 });
+    return ends.get(id);
+  };
+  for (const points of paths) {
+    const head = vertex(points[0]), tail = vertex(points.at(-1));
+    if (head === tail) { closed.push(points); continue; }
+    const edge = { points, head, tail, used: false };
+    head.edges.push(edge);
+    tail.edges.push(edge);
+  }
+  function nextEdge(at) {
+    while (at.edges[at.next]?.used) at.next++;
+    return at.edges[at.next];
+  }
+  for (const oddFirst of [true, false]) {
+    for (const vertex of ends.values()) {
+      if (oddFirst && vertex.edges.length % 2 === 0) continue;
+      while (nextEdge(vertex)) {
+        const trail = [];
+        let at = vertex, edge;
+        while ((edge = nextEdge(at))) {
+          edge.used = true;
+          const { points, head, tail } = edge;
+          if (at === head) {
+            for (let i = trail.length ? 1 : 0; i < points.length; i++) trail.push(points[i]);
+            at = tail;
+          } else {
+            for (let i = points.length - (trail.length ? 2 : 1); i >= 0; i--) trail.push(points[i]);
+            at = head;
+          }
+        }
+        open.push(trail);
+      }
+    }
+  }
+  return closed.concat(open);
+}
+
 function toMachinePaths(pxPaths, tf, p, workArea) {
-  const tol = (11 - p.detail) * 0.05; // mm
+  const tol = p.simplifyMm ?? (11 - p.detail) * 0.05;
   let paths = pxPaths
     .map(({ points, closed, connectsJunctions, isHatch }) => {
       const mm = points.map((q) => ({ x: tf.offX + q.x * tf.scale, y: tf.offY + (tf.h - q.y) * tf.scale }));
@@ -419,7 +504,7 @@ function toMachinePaths(pxPaths, tf, p, workArea) {
     })
     .filter(({ points, connectsJunctions }) => connectsJunctions || length(points) >= 0.5)
     .map(({ points }) => points);
-  paths = order(paths);
+  paths = order(p.mode === "centerline" ? joinCenterlines(paths) : paths);
   // Kẹp vào vùng vẽ (TC18: không trục nào vượt giới hạn)
   for (const pts of paths) for (const q of pts) {
     q.x = Math.min(workArea.width, Math.max(0, q.x));
@@ -482,22 +567,25 @@ function distanceTransform(mask, w, h) {
 }
 
 // Vẽ các nét (mm) ra ảnh nhị phân cùng lưới với ảnh tham chiếu, có tính bề rộng bút
-function rasterize(paths, ref, tf, penWidthMm, pixelOffset) {
+function rasterize(paths, ref, tf, penWidthMm) {
   const { width: W, height: H } = ref;
   const mmPerPx = (tf.w * tf.scale) / W;
   const top = tf.offY + tf.h * tf.scale;
-  const r = Math.max(0.5, penWidthMm / 2 / mmPerPx);
+  const mmPerPy = (tf.h * tf.scale) / H;
+  const r = Math.max(penWidthMm / 2, Math.min(mmPerPx, mmPerPy) / 2);
+  const rx = r / mmPerPx, ry = r / mmPerPy;
   const out = new Uint8Array(W * H);
-  const P = (q) => ({ x: (q.x - tf.offX) / mmPerPx - pixelOffset, y: (top - q.y) / mmPerPx - pixelOffset });
+  const P = (q) => ({ x: (q.x - tf.offX) / mmPerPx - 0.5, y: (top - q.y) / mmPerPy - 0.5 });
   for (const path of paths) {
     for (let i = 1; i < path.length; i++) {
       const a = P(path[i - 1]), b = P(path[i]);
-      const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - r)), x1 = Math.min(W - 1, Math.ceil(Math.max(a.x, b.x) + r));
-      const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - r)), y1 = Math.min(H - 1, Math.ceil(Math.max(a.y, b.y) + r));
-      const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+      const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - rx)), x1 = Math.min(W - 1, Math.ceil(Math.max(a.x, b.x) + rx));
+      const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - ry)), y1 = Math.min(H - 1, Math.ceil(Math.max(a.y, b.y) + ry));
+      const dx = (b.x - a.x) * mmPerPx, dy = (b.y - a.y) * mmPerPy, L2 = dx * dx + dy * dy;
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        const t = L2 ? Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / L2)) : 0;
-        if ((x - a.x - t * dx) ** 2 + (y - a.y - t * dy) ** 2 <= r * r) out[y * W + x] = 1;
+        const ex = (x - a.x) * mmPerPx, ey = (y - a.y) * mmPerPy;
+        const t = L2 ? Math.max(0, Math.min(1, (ex * dx + ey * dy) / L2)) : 0;
+        if ((ex - t * dx) ** 2 + (ey - t * dy) ** 2 <= r * r) out[y * W + x] = 1;
       }
     }
   }
@@ -509,54 +597,92 @@ function rasterize(paths, ref, tf, penWidthMm, pixelOffset) {
  * - chamferMm: trung bình 2 chiều (nét vẽ → mực gần nhất, mực → nét vẽ gần nhất), đơn vị mm. Càng nhỏ càng giống.
  * - iou: phần trăm trùng khớp diện tích nét.
  */
-function evaluate(paths, ref, tf, p) {
-  const { out: drawn, mmPerPx } = rasterize(paths, ref, tf, p.penWidthMm, p.mode === "centerline" ? 0.5 : 0);
+function evaluate(paths, ref, tf, p, dInk) {
+  const { out: drawn, mmPerPx } = rasterize(paths, ref, tf, p.penWidthMm);
   const { binary: ink, width: W, height: H } = ref;
   let nInk = 0, nDrawn = 0, inter = 0;
   for (let i = 0; i < ink.length; i++) {
     nInk += ink[i]; nDrawn += drawn[i];
     if (ink[i] && drawn[i]) inter++;
   }
-  if (!nInk || !nDrawn) return { chamferMm: 99, iou: 0, extraMm: 99, missMm: 99 };
-  const dInk = distanceTransform(ink, W, H);
+  if (!nInk || !nDrawn) return { chamferMm: 99, iou: 0, extraMm: 99, missMm: 99, coverage: 0, precision: 0, score: 0 };
+  dInk ??= distanceTransform(ink, W, H);
   const dDrawn = distanceTransform(drawn, W, H);
-  let extra = 0, miss = 0;
+  let extra = 0, miss = 0, covered = 0, precise = 0;
+  const tolerance = Math.max(1, p.penWidthMm / (2 * mmPerPx));
   for (let i = 0; i < ink.length; i++) {
-    if (drawn[i]) extra += dInk[i];
-    if (ink[i]) miss += dDrawn[i];
+    if (drawn[i]) { extra += dInk[i]; if (dInk[i] <= tolerance) precise++; }
+    if (ink[i]) { miss += dDrawn[i]; if (dDrawn[i] <= tolerance) covered++; }
   }
   const extraMm = (extra / nDrawn) * mmPerPx; // vẽ thừa chỗ không có mực
   const missMm = (miss / nInk) * mmPerPx; // bỏ sót mực
   const r2 = (v) => Math.round(v * 100) / 100;
+  const coverage = covered / nInk, precision = precise / nDrawn;
+  const f1 = coverage + precision ? 2 * precision * coverage / (precision + coverage) : 0;
+  const iou = inter / (nInk + nDrawn - inter);
   return {
+    coverage: r2(100 * coverage), precision: r2(100 * precision),
+    score: r2(100 * (0.6 * iou + 0.4 * f1)),
     chamferMm: r2((extraMm + missMm) / 2),
     extraMm: r2(extraMm),
     missMm: r2(missMm),
-    iou: Math.round((inter / (nInk + nDrawn - inter)) * 1000) / 10,
+    iou: Math.round(iou * 1000) / 10,
   };
 }
 
 function estimate(paths, p) {
-  let draw = 0, travel = 0, cur = { x: 0, y: 0 };
+  let draw = 0, travel = 0, seconds = 0, cur = { x: 0, y: 0 };
+  // Approximate stop-and-go ramps using the legacy controller's 400 mm/s².
+  const timeFor = (distance, feed) => {
+    const speed = feed / 60, accel = 400;
+    return distance < speed * speed / accel
+      ? 2 * Math.sqrt(distance / accel)
+      : distance / speed + speed / accel;
+  };
   for (const pts of paths) {
-    travel += Math.hypot(pts[0].x - cur.x, pts[0].y - cur.y);
-    draw += length(pts);
-    cur = pts[pts.length - 1];
+    const approach = Math.hypot(pts[0].x - cur.x, pts[0].y - cur.y);
+    travel += approach;
+    seconds += timeFor(approach, p.travelFeed) + 2 * PEN_LIFT_SECONDS;
+    for (let i = 1; i < pts.length; i++) {
+      const mm = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      draw += mm;
+      seconds += timeFor(mm, p.drawFeed);
+    }
+    cur = pts.at(-1);
   }
-  travel += Math.hypot(cur.x, cur.y);
-  const minutes = draw / p.drawFeed + travel / p.travelFeed + (paths.length * 2 * PEN_LIFT_SECONDS) / 60;
-  return { drawLengthMm: Math.round(draw), travelMm: Math.round(travel), minutes: Math.round(minutes * 10) / 10 };
+  const home = Math.hypot(cur.x, cur.y);
+  travel += home;
+  seconds += timeFor(home, p.travelFeed);
+  return { drawLengthMm: Math.round(draw), travelMm: Math.round(travel), seconds: Math.round(seconds), minutes: Math.round(seconds / 6) / 10 };
 }
 
-async function referenceMask(buffer, p) {
-  const gray = await loadGray(buffer, EVAL_SIZE);
-  const { bin, info } = binarize(gray, p);
-  return { ref: p.despeckle ? despeckle(bin, minAreaFor(bin.width, bin.height)) : bin, info };
+function sourceReference(gray) {
+  const level = otsu(gray);
+  // The frame is a better background cue than total ink area for dense logos.
+  let dark = 0, count = 0;
+  const classify = (x, y) => { dark += Number(gray.data[y * gray.width + x] < level); count++; };
+  for (let x = 0; x < gray.width; x++) {
+    classify(x, 0);
+    if (gray.height > 1) classify(x, gray.height - 1);
+  }
+  for (let y = 1; y < gray.height - 1; y++) {
+    classify(0, y);
+    if (gray.width > 1) classify(gray.width - 1, y);
+  }
+  const invert = dark > 0.75 * count;
+  const litGray = invert ? { ...gray, data: gray.data.map((v) => 255 - v) } : gray;
+  const threshold = unevenLighting(litGray, invert ? 256 - level : level) ? "adaptive" : level;
+  return { threshold, invert, despeckle: true };
+}
+
+function referenceMask(gray, params = sourceReference(gray)) {
+  const { bin, info } = binarize(gray, params);
+  return { ref: params.despeckle ? despeckle(bin, minAreaFor(bin.width, bin.height)) : bin, info };
 }
 
 // ---------------- API của module ----------------
 
-async function buildFromGray(gray, p, workArea, cache = {}) {
+function buildFromGray(gray, p, workArea, cache = {}) {
   const tf = transformFor(gray.width, gray.height, p, workArea);
   if (!cache.bin) {
     const { bin, info } = binarize(gray, p);
@@ -564,9 +690,10 @@ async function buildFromGray(gray, p, workArea, cache = {}) {
     cache.info = info;
   }
   cache.px ??= {};
-  const spacingPx = Math.max(1, (p.penWidthMm * 0.9) / tf.scale);
-  cache.px[p.mode] ??= pixelPaths(cache.bin, p.mode, spacingPx);
-  const paths = toMachinePaths(cache.px[p.mode], tf, p, workArea);
+  const spacingPx = Math.max(0.5, p.penWidthMm * p.hatchRatio / tf.scale);
+  const key = p.mode === "fill" ? `fill:${spacingPx}` : p.mode;
+  cache.px[key] ??= pixelPaths(cache.bin, p.mode, spacingPx);
+  const paths = toMachinePaths(cache.px[key], tf, p, workArea);
   return { tf, paths, info: cache.info };
 }
 
@@ -578,11 +705,11 @@ async function buildFromGray(gray, p, workArea, cache = {}) {
 async function convert(buffer, input, workArea, { refParams } = {}) {
   const p = normalizeParams(input, workArea);
   const gray = await loadGray(buffer, maxSizeFor(p.detail));
-  const { tf, paths, info } = await buildFromGray(gray, p, workArea);
+  const { tf, paths, info } = buildFromGray(gray, p, workArea);
   // Các giá trị "auto" được thay bằng giá trị đã chọn để người dùng thấy và chạy lại được
   const used = { ...p, threshold: info.method === "adaptive" ? "adaptive" : info.level, invert: info.invert };
   // refParams: chấm điểm theo một ảnh tham chiếu cố định (để so sánh công bằng giữa các cấu hình)
-  const { ref } = await referenceMask(buffer, refParams ? { ...used, ...refParams } : used);
+  const { ref } = referenceMask(await loadGray(buffer, EVAL_SIZE), refParams);
   const gcode = toGcode(paths, used);
   const stats = {
     paths: paths.length,
@@ -596,57 +723,93 @@ async function convert(buffer, input, workArea, { refParams } = {}) {
   return { gcode, params: used, stats };
 }
 
-/**
- * Tự dò tham số: thử lưới (kiểu nét × mức chi tiết × làm mượt), chấm điểm từng bộ,
- * trả về 3 phương án: Chi tiết (giống nhất), Cân bằng, Nhanh.
- */
+/** Search shape first, then refine the best candidates against the same ink mask. */
 async function autoTune(buffer, input, workArea) {
-  const t0 = Date.now();
-  const base = normalizeParams({ ...input, threshold: input.threshold === "adaptive" ? "adaptive" : "auto", invert: input.invert ?? "auto" }, workArea);
-  const { ref, info } = await referenceMask(buffer, base);
-  // Mọi bộ thử dùng cùng cách tách nét với ảnh tham chiếu → so sánh công bằng
-  const fixed = { ...base, threshold: info.method === "adaptive" ? "adaptive" : info.level, invert: info.invert };
+  const start = performance.now(), deadline = start + 7500;
+  const base = normalizeParams(input, workArea);
+  if (!/^M5$/i.test(base.penUp.trim()) || !/^M3 S(?:\d{1,2}|1[0-7]\d|180)$/i.test(base.penDown.trim())) {
+    throw new Error("Tìm cấu hình cần lệnh nâng M5 và lệnh hạ M3 S0–180 theo giao thức máy.");
+  }
 
-  const results = [];
-  for (const detail of [3, 5, 7, 9]) {
-    const gray = await loadGray(buffer, maxSizeFor(detail));
-    const cache = {};
-    for (const mode of ["centerline", "outline", "fill"]) {
-      for (const smoothing of [0, 1, 2]) {
-        const p = { ...fixed, detail, mode, smoothing };
-        const { tf, paths } = await buildFromGray(gray, p, workArea, cache);
-        if (!paths.length) continue;
-        results.push({ params: p, metrics: { paths: paths.length, ...estimate(paths, p), ...evaluate(paths, ref, tf, p) } });
+  const evalGray = await loadGray(buffer, EVAL_SIZE);
+  const source = sourceReference(evalGray);
+  const { ref, info } = referenceMask(evalGray, source);
+  const results = [], visited = new Set(), grays = new Map(), caches = new Map();
+  const reply = (candidates) => ({
+    candidates, reference: info, tried: visited.size, ms: Math.round(performance.now() - start),
+    timeLimited: performance.now() >= deadline,
+  });
+  if (!ref.binary.some(Boolean)) return reply([]);
+  const dInk = distanceTransform(ref.binary, ref.width, ref.height);
+  const fixed = { ...base, ...source, penUp: base.penUp.trim().toUpperCase(), penDown: base.penDown.trim().toUpperCase() };
+
+  async function tryPlan(params) {
+    if (performance.now() >= deadline) return;
+    const key = JSON.stringify(params);
+    if (visited.has(key)) return;
+    visited.add(key);
+    const size = maxSizeFor(params.detail);
+    if (!grays.has(size)) grays.set(size, await loadGray(buffer, size));
+    const group = [size, params.threshold, params.invert, params.despeckle].join("/");
+    const cache = caches.get(group) || {};
+    caches.delete(group);
+    caches.set(group, cache);
+    if (caches.size > 6) caches.delete(caches.keys().next().value);
+    const { paths, tf } = buildFromGray(grays.get(size), params, workArea, cache);
+    if (!paths.length) return;
+    const metrics = evaluate(paths, ref, tf, params, dInk);
+    if (!metrics.score) return;
+    results.push({ params, metrics: { paths: paths.length, ...metrics, ...estimate(paths, params) } });
+  }
+
+  const modes = ["centerline", "outline", "fill"];
+  for (const detail of [5, 3, 7, 9]) {
+    for (const mode of modes) {
+      for (const smoothing of [1, 0, 2]) {
+        await tryPlan({ ...fixed, detail, mode, smoothing });
       }
     }
   }
-  if (!results.length) return { candidates: [], reference: info, tried: 0, ms: Date.now() - t0 };
 
-  // Chi tiết = sai lệch nhỏ nhất. Cân bằng / Nhanh = vẽ nhanh nhất trong số các bộ
-  // có sai lệch không quá giá trị tốt nhất + 0,3 / 1,0 lần bề rộng bút.
-  const cMin = Math.min(...results.map((r) => r.metrics.chamferMm));
-  const fastestWithin = (tol) => results
-    .filter((r) => r.metrics.chamferMm <= cMin + tol)
-    .reduce((a, b) => (b.metrics.minutes < a.metrics.minutes
-      || (b.metrics.minutes === a.metrics.minutes && b.metrics.chamferMm < a.metrics.chamferMm) ? b : a));
-
-  const detailed = results.reduce((a, b) => (b.metrics.chamferMm < a.metrics.chamferMm
-    || (b.metrics.chamferMm === a.metrics.chamferMm && b.metrics.minutes < a.metrics.minutes) ? b : a));
-  const balanced = fastestWithin(0.3 * base.penWidthMm);
-  const fast = fastestWithin(1.0 * base.penWidthMm);
-
-  const candidates = [];
-  for (const [label, r] of [["Chi tiết", detailed], ["Cân bằng", balanced], ["Nhanh", fast]]) {
-    const same = candidates.find((c) => c.result === r);
-    if (same) same.label += ` / ${label}`;
-    else candidates.push({ label, result: r });
+  const threshold = otsu(evalGray);
+  const globalOptions = [threshold, threshold - 15, threshold + 15, threshold + 35]
+    .map((v) => Math.max(1, Math.min(254, v)));
+  const thresholds = new Set([source.threshold, ...globalOptions, "adaptive"]);
+  if (typeof base.threshold === "number") thresholds.add(base.threshold);
+  for (const level of thresholds) {
+    for (const mode of modes) {
+      for (const despeckle of [true, false]) {
+        await tryPlan({ ...fixed, detail: 5, mode, threshold: level, despeckle, smoothing: 1 });
+      }
+    }
   }
-  return {
-    candidates: candidates.map(({ label, result }) => ({ label, params: result.params, metrics: result.metrics })),
-    reference: info,
-    tried: results.length,
-    ms: Date.now() - t0,
-  };
+
+  const rank = (a, b) => b.metrics.score - a.metrics.score
+    || a.metrics.chamferMm - b.metrics.chamferMm || a.metrics.seconds - b.metrics.seconds;
+  for (const seed of modes.map((mode) => results.filter((r) => r.params.mode === mode).sort(rank)[0]).filter(Boolean)) {
+    const p = seed.params;
+    for (const detail of new Set([p.detail, 2, 6, 10])) {
+      for (const simplifyMm of [0.10, 0.30, 0.55]) {
+        await tryPlan({ ...p, detail, simplifyMm });
+      }
+    }
+    for (const smoothing of [0, 2, 3]) await tryPlan({ ...p, smoothing });
+    if (p.mode === "fill") {
+      for (const hatchRatio of [0.65, 0.8, 1]) {
+        for (const detail of [p.detail, 4, 8]) await tryPlan({ ...p, detail, hatchRatio });
+      }
+    }
+  }
+
+  if (!results.length) return reply([]);
+  const detailed = results.sort(rank)[0];
+  const fast = results.filter(({ metrics: m }) => m.score >= detailed.metrics.score - 6
+    && m.coverage >= detailed.metrics.coverage - 8 && m.precision >= detailed.metrics.precision - 8)
+    .sort((a, b) => a.metrics.seconds - b.metrics.seconds || rank(a, b))[0];
+  return reply([
+    { id: "detail", label: "Chi tiết", ...detailed },
+    { id: "fast", label: "Nhanh", ...fast },
+  ]);
 }
 
 module.exports = { convert, autoTune, normalizeParams, DEFAULTS };

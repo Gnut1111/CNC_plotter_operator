@@ -13,15 +13,17 @@ Mọi API (trừ đăng nhập) cần header `Authorization: Bearer <JWT>`.
 |---|---|---|
 | POST | `/api/drawings` | multipart: `image` (PNG/JPG ≤ 5 MB), `params` (JSON), `machineId` (tùy chọn, lấy vùng vẽ), `previewHash` (tùy chọn, trả 409 nếu G-code khác bản đã xem). → `{drawing, gcode}`. Sai định dạng → 400, quá dung lượng → 413, không có nét → 422 |
 | POST | `/api/drawings/preview` | Như trên nhưng **không lưu**: trả `{gcode, params, stats, previewHash}` để cập nhật bản xem trước. |
-| POST | `/api/drawings/auto` | Như trên nhưng **không lưu**: thử ~36 bộ tham số, trả `{candidates: [{label, params, metrics}], reference, tried, ms}` — 3 phương án Chi tiết / Cân bằng / Nhanh |
+| POST | `/api/drawings/auto` | Như trên nhưng **không lưu**: dò theo ngân sách 7,5 giây, trả `{candidates: [{id, label, params, metrics}], reference, tried, ms, timeLimited}` với Chi tiết và Nhanh. Mỗi lần chạy một yêu cầu. 429 khi đang bận, 503 nếu chạm giới hạn HTTP 9,5 giây |
 | GET | `/api/drawings` | Bản vẽ của tôi |
 | GET | `/api/drawings/:id/gcode` | File G-code |
 | GET | `/api/drawings/:id/image` | Ảnh gốc |
 | GET | `/api/converter/defaults` | Tham số mặc định |
 
-`params`: `widthMm, heightMm, detail (1–10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), despeckle (bool), penWidthMm, drawFeed, travelFeed, penUp, penDown`.
+`params`: `widthMm, heightMm, detail (1–10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), simplifyMm (mm, null để suy ra từ detail), hatchRatio (0,6–1 lần bề rộng bút), despeckle (bool), penWidthMm, drawFeed, travelFeed, penUp, penDown`.
 
-`stats` / `metrics` của bản vẽ: `chamferMm` (sai lệch trung bình so với ảnh gốc, mm — càng nhỏ càng giống), `extraMm` (vẽ thừa), `missMm` (bỏ sót), `iou` (% trùng khớp nét), `minutes` (thời gian vẽ ước lượng), `paths`, `drawLengthMm`, `travelMm`, `binarize` (cách tách nét đã chọn).
+`stats` / `metrics` của bản vẽ: `chamferMm` (sai lệch trung bình so với ảnh gốc, mm — càng nhỏ càng giống), `extraMm` (vẽ thừa), `missMm` (bỏ sót), `iou` (% diện tích nét giao/hợp), `coverage` và `precision` (% nét giữ được và % mực đi đúng), `score` (60% IoU + 40% F1 theo dung sai nét), `minutes` (thời gian vẽ ước lượng), `paths`, `drawLengthMm`, `travelMm`, `binarize` (cách tách nét đã chọn).
+
+Chi tiết chọn điểm cao nhất trong các cấu hình đã thử. Nhanh chọn thời gian máy ngắn nhất trong các cấu hình mất tối đa 6 điểm tổng, 8 điểm coverage và 8 điểm precision so với Chi tiết. Ước lượng thời gian gồm di chuyển, tăng giảm tốc theo từng đoạn và nâng hạ bút. Cả hai giữ kích thước, bề rộng bút, tốc độ và lệnh servo đang chọn. Khi dùng tự dò, lệnh servo theo giao thức là `M5` và `M3 S0` đến `M3 S180`. Số liệu máy là mô phỏng và cần đối chiếu trên ESP32 thực tế.
 
 ## Máy & phiên vẽ
 | Method | Path | Mô tả |

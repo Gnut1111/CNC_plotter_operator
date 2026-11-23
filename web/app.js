@@ -122,6 +122,7 @@ function readParams() {
     widthMm: +form.widthMm.value, heightMm: +form.heightMm.value, detail: +form.detail.value,
     threshold: tm === "manual" ? +form.threshold.value : tm,
     invert: form.invert.value, mode: form.mode.value, smoothing: +form.smoothing.value,
+    simplifyMm: form.simplifyMm.value === "" ? null : +form.simplifyMm.value, hatchRatio: +form.hatchRatio.value,
     despeckle: form.despeckle.checked, penWidthMm: +form.penWidthMm.value,
     drawFeed: +form.drawFeed.value, travelFeed: +form.travelFeed.value,
     penUp: form.penUp.value.trim(), penDown: form.penDown.value.trim(),
@@ -329,13 +330,17 @@ $("#autoBtn").onclick = async () => {
     });
     if (tuneRequest !== controller) return;
     candidates = result.candidates;
-    panel.innerHTML = candidates.map((c, i) => `
-      <div class="cand">
-        <b>${esc(c.label)}</b>
-        <small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small>
-        <small>Độ khớp ${c.metrics.iou}% · khoảng ${c.metrics.minutes} phút</small>
-        <button type="button" class="small" data-cand="${i}">Xem phương án ${esc(c.label.toLowerCase())}</button>
-      </div>`).join("");
+    const elapsed = (result.ms / 1000).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+    const same = candidates.length === 2 && JSON.stringify(candidates[0].params) === JSON.stringify(candidates[1].params);
+    panel.innerHTML = `<small class="muted">Đã thử ${result.tried} cấu hình trong ${elapsed} giây.${result.timeLimited ? " Đã hết thời gian tìm." : ""}</small>`
+      + (same ? '<small class="muted">Hai lựa chọn cho cùng cấu hình ở ảnh này.</small>' : "")
+      + candidates.map((c, i) => `
+        <div class="cand">
+          <small>${MODE_VI[c.params.mode]} · chi tiết ${c.params.detail} · mượt ${c.params.smoothing}</small>
+          <small>Trùng diện tích nét ${c.metrics.iou}% · giữ ${c.metrics.coverage}% nét</small>
+          <small>Ước tính ${c.metrics.minutes.toLocaleString("vi-VN")} phút · ${c.metrics.paths} lượt đi nét</small>
+          <button type="button" class="small" data-cand="${i}" aria-pressed="false">${esc(c.label)}</button>
+        </div>`).join("");
   } catch (err) {
     if (tuneRequest === controller) panel.textContent = err.message;
   } finally {
@@ -350,6 +355,15 @@ $("#autoResult").addEventListener("click", (event) => {
   form.detail.value = params.detail;
   form.mode.value = params.mode;
   form.smoothing.value = params.smoothing;
+  form.simplifyMm.value = params.simplifyMm ?? "";
+  form.hatchRatio.value = params.hatchRatio;
+  form.despeckle.checked = params.despeckle;
+  form.penUp.value = params.penUp;
+  form.penDown.value = params.penDown;
+  $$("#autoResult [data-cand]").forEach((choice) => {
+    choice.classList.toggle("primary", choice === button);
+    choice.setAttribute("aria-pressed", String(choice === button));
+  });
   form.thresholdMode.value = params.threshold === "adaptive" ? "adaptive" : "manual";
   if (params.threshold !== "adaptive") form.threshold.value = params.threshold;
   form.invert.value = String(params.invert);
