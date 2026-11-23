@@ -21,6 +21,9 @@ const DEFAULTS = {
   rasterPx: null, // null: theo mức chi tiết
   despeckle: true, // xóa đốm nhiễu nhỏ
   penWidthMm: 0.5, // bề rộng nét bút — dùng cho khoảng cách tô gạch và chấm điểm
+  controlledTravelFeed: null,
+  penLiftZ: MACHINE.penLiftMax,
+  penLowerFeed: MACHINE.penLowerFeedMax,
   travelFeed: MACHINE.rapidFeed,
   drawFeed: MACHINE.drawFeed,
   penUp: MACHINE.penUp,
@@ -55,6 +58,14 @@ function normalizeParams(input = {}, workArea) {
   if (p.rasterPx !== null) p.rasterPx = Math.round(p.rasterPx);
   p.despeckle = !(input.despeckle === false || input.despeckle === "false");
   p.penWidthMm = num(input.penWidthMm, 0.1, 3, DEFAULTS.penWidthMm);
+  p.drawFeed = Math.round(num(input.drawFeed, MACHINE.minFeed, MACHINE.drawFeed, DEFAULTS.drawFeed));
+  p.controlledTravelFeed = num(input.controlledTravelFeed, MACHINE.minFeed, MACHINE.controlledTravelMax, null);
+  if (p.controlledTravelFeed !== null) p.controlledTravelFeed = Math.round(p.controlledTravelFeed);
+  p.travelFeed = p.controlledTravelFeed ?? MACHINE.rapidFeed;
+  p.penLiftZ = Math.round(num(input.penLiftZ, 0.1, MACHINE.penLiftMax, DEFAULTS.penLiftZ) * 10) / 10;
+  p.penLowerFeed = Math.round(num(input.penLowerFeed, MACHINE.minFeed, MACHINE.penLowerFeedMax, DEFAULTS.penLowerFeed));
+  p.penUp = `G0 Z${p.penLiftZ}`;
+  p.penDown = `G1 Z0 F${p.penLowerFeed}`;
   return p;
 }
 
@@ -555,14 +566,17 @@ const f = (v) => (Math.round(v * 1000) / 1000).toString();
 
 function toGcode(paths, p) {
   const lines = ["; Pixel2Plot - CNC_plotter_operator", "G21", "G90", p.penUp];
+  const travel = (x, y) => p.controlledTravelFeed === null
+    ? `G0 X${f(x)} Y${f(y)}`
+    : `G1 X${f(x)} Y${f(y)} F${p.controlledTravelFeed}`;
   for (const path of paths) {
     const [s, ...rest] = path;
-    lines.push(`G0 X${f(s.x)} Y${f(s.y)}`);
+    lines.push(travel(s.x, s.y));
     lines.push(p.penDown);
     for (const q of rest) lines.push(`G1 X${f(q.x)} Y${f(q.y)} F${p.drawFeed}`);
     lines.push(p.penUp);
   }
-  lines.push("G0 X0 Y0", "M2");
+  lines.push(travel(0, 0), "M2");
   return lines.join("\n") + "\n";
 }
 

@@ -2,6 +2,10 @@
 const profile = Object.freeze({
   workArea: Object.freeze({ width: 120, height: 80 }),
   drawFeed: 900,
+  minFeed: 60,
+  controlledTravelMax: 2400,
+  penLiftMax: 5,
+  penLowerFeedMax: 300,
   rapidFeed: 150 * 60, // Pico uses MAX_SPEED_MM_S for G0 regardless of F.
   accelMmS2: 400,
   stepsPerMm: Object.freeze({ x: 80, y: 79 }),
@@ -25,25 +29,29 @@ function machineArea(machine) {
 function validateGcode(gcode, area) {
   const lines = gcode.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !line.startsWith(";"));
   const [units, mode, lift, ...body] = lines;
-  if (units !== "G21" || mode !== "G90" || lift !== profile.penUp
-    || body.pop() !== "M2" || body.at(-1) !== "G0 X0 Y0") {
+  const liftZ = /^G0 Z(\d+(?:\.\d)?)$/.exec(lift);
+  const home = /^(?:G0 X0 Y0|G1 X0 Y0 F\d+)$/;
+  if (units !== "G21" || mode !== "G90" || !liftZ || +liftZ[1] < 0.1 || +liftZ[1] > profile.penLiftMax
+    || body.pop() !== "M2" || !home.test(body.at(-1))) {
     return "G-code chưa theo cấu hình máy HTrang. Tạo lại đường vẽ từ ảnh gốc.";
   }
   let down = false, drew = false, positioned = false;
   for (const line of body) {
-    if (line === profile.penDown && !down && positioned) {
+    const lower = /^G1 Z0 F(\d+)$/.exec(line);
+    if (lower && +lower[1] >= profile.minFeed && +lower[1] <= profile.penLowerFeedMax && !down && positioned) {
       down = true;
       continue;
     }
-    if (line === profile.penUp && down) {
+    if (line === lift && down) {
       down = false;
       positioned = false;
       continue;
     }
     const move = /^G([01]) X(\d+(?:\.\d{1,3})?) Y(\d+(?:\.\d{1,3})?)(?: F(\d+))?$/.exec(line);
-    if (!move || line.length > profile.maxLineBytes
-      || (down ? move[1] !== "1" || Number(move[4]) !== profile.drawFeed
-        : move[1] !== "0" || move[4] !== undefined)) {
+    const feedValid = move?.[1] === "1"
+      && +move[4] >= profile.minFeed && +move[4] <= (down ? profile.drawFeed : profile.controlledTravelMax);
+    const rapidValid = !down && move?.[1] === "0" && move[4] === undefined;
+    if (!move || line.length > profile.maxLineBytes || (!feedValid && !rapidValid)) {
       return "Lệnh chuyển động không phù hợp cấu hình máy HTrang. Tạo lại đường vẽ.";
     }
     if (Number(move[2]) > area.width || Number(move[3]) > area.height) {

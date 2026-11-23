@@ -351,6 +351,9 @@ function readParams() {
   if (form.hatchRatio && form.hatchRatio.value !== "") p.hatchRatio = +form.hatchRatio.value;
   if (form.fillStrategy) p.fillStrategy = form.fillStrategy.value;
   if (form.rasterPx && form.rasterPx.value !== "") p.rasterPx = +form.rasterPx.value;
+  for (const name of ["drawFeed", "controlledTravelFeed", "penLiftZ", "penLowerFeed"]) {
+    if (form[name].value !== "") p[name] = form[name].valueAsNumber;
+  }
   return p;
 }
 

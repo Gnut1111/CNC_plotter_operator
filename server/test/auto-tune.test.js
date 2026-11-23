@@ -67,6 +67,27 @@ test("the machine profile clamps oversized requests and rejects stale or oversiz
   assert.match(validateGcode(gcode, { width: 1, height: 1 }), /vượt vùng/);
 });
 
+test("bounded motion overrides change G-code and ETA while retaining the traced ink", async () => {
+  const image = await readFile(join(__dirname, "../../docs/samples/lineart.png"));
+  const original = await convert(image, {}, area);
+  const settings = { drawFeed: 600, controlledTravelFeed: 1200, penLiftZ: 2.5, penLowerFeed: 180 };
+  const { gcode, stats, params } = await convert(image, settings, area);
+  for (const [key, value] of Object.entries(settings)) assert.equal(params[key], value, key);
+  assert.equal(stats.iou, original.stats.iou);
+  assert.equal(stats.paths, original.stats.paths);
+  assert.ok(stats.seconds > original.stats.seconds);
+  assert.equal(validateGcode(gcode, area), null);
+  assert.match(gcode, /G0 Z2\.5\nG1 X[\d.]+ Y[\d.]+ F1200\nG1 Z0 F180\nG1 X[\d.]+ Y[\d.]+ F600/);
+  assert.ok(gcode.endsWith("G1 X0 Y0 F1200\nM2\n"));
+  assert.match(validateGcode(gcode.replace("F1200", "F2401"), area), /chuyển động/);
+  assert.match(validateGcode(gcode.replace("F600", "F901"), area), /chuyển động/);
+  assert.match(validateGcode(gcode.replace("G0 Z2.5", "G0 Z0"), area), /cấu hình máy/);
+  assert.match(validateGcode(gcode.replace("G1 Z0 F180", "G1 Z0 F301"), area), /chuyển động/);
+
+  const tuned = await autoTune(image, settings, area, "fast");
+  for (const [key, value] of Object.entries(settings)) assert.equal(tuned.candidates[0].params[key], value, key);
+});
+
 test("a crossing keeps the same four arms in two pen-down trails", async () => {
   const image = await sharp(Buffer.from(`<svg width="100" height="100">
     <rect width="100" height="100" fill="white"/>

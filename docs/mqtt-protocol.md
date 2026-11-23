@@ -108,4 +108,4 @@ Server                                   Máy
 
 ## 7. G-code máy cần hiểu
 
-`G21` chọn mm, `G90` chọn tọa độ tuyệt đối. `G0 Z5` nâng bút, `G1 Z0 F300` hạ bút. `G0 X… Y…` chạy không theo rapid của firmware. `G1 X… Y… F900` vẽ. Phiên kết thúc bằng nâng bút, `G0 X0 Y0` rồi `M2`. Dòng bắt đầu bằng `;` là chú thích. Xem [cấu hình máy HTrang](machine-profile.md).
+`G21` chọn mm, `G90` chọn tọa độ tuyệt đối. `G0 Z…` với Z dương nâng bút, mặc định Z5. `G1 Z0 F…` hạ bút, mặc định F300. `G0 X… Y…` chạy không theo rapid của firmware. `G1 X… Y… F…` di chuyển theo feed chỉ định. G1 có thể chạy khi bút đang nâng để giới hạn tốc độ chạy không. Phiên kết thúc bằng nâng bút, trở về X0 Y0 rồi `M2`. Dòng bắt đầu bằng `;` là chú thích. Xem [cấu hình máy HTrang](machine-profile.md).
