@@ -6,13 +6,15 @@ const express = require("express");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const config = require("./config");
-const { db, newToken } = require("./db");
+const { db, newToken, validPassword } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
+const { getSession, revokeUserSessions } = require("./sessions");
+const { disconnectMachine } = require("./mqttBroker");
 const { convert, DEFAULTS } = require("./converter");
 const { profile, machineArea, validateGcode } = require("./machine-profile");
 const { tuneInWorker } = require("./tune-worker");
 const dispatcher = require("./dispatcher");
-const { publicMachine } = require("./statusService");
+const { publicMachine, setOffline } = require("./statusService");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -22,7 +24,7 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 // ---------------- Drawings (Image Uploader + Converter + Storage) ----------------
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: config.upload.maxBytes },
+  limits: { fileSize: config.upload.maxBytes, files: 1, fields: 7, parts: 9 },
   fileFilter: (req, file, cb) => {
     if (!config.upload.mimeTypes.includes(file.mimetype)) {
       const e = new Error("Chỉ chấp nhận ảnh PNG hoặc JPG");
@@ -52,7 +54,13 @@ async function processUpload(req, res, fn) {
   if (!isPngOrJpeg(req.file.buffer)) { res.status(400).json({ error: "Nội dung file không phải PNG/JPG hợp lệ" }); return null; }
   try {
     const params = typeof req.body.params === "string" ? JSON.parse(req.body.params || "{}") : {};
-    return await fn(req.file.buffer, params, workAreaOf(req.body.machineId));
+    const result = await fn(req.file.buffer, params, workAreaOf(req.body.machineId));
+    if (res.destroyed) return null;
+    if (!getSession(req.sessionId)) {
+      res.status(401).json({ error: "Phiên đăng nhập không còn hiệu lực" });
+      return null;
+    }
+    return result;
   } catch (e) {
     if (e.status) throw e;
     res.status(400).json({ error: `Không xử lý được ảnh: ${e.message}` });
@@ -195,7 +203,25 @@ router.post("/jobs/:id/:action(pause|resume|cancel)", wrap(async (req, res) => {
 const admin = express.Router();
 admin.use(requireRole("admin"));
 
-admin.get("/machines", (req, res) => res.json({ machines: db.prepare("SELECT * FROM machines ORDER BY id").all() }));
+admin.get("/machines", (req, res) => {
+  const machines = db.prepare("SELECT id FROM machines ORDER BY id").all().map(({ id }) => publicMachine(id));
+  res.json({ machines });
+});
+
+admin.get("/machines/:id/token", (req, res) => {
+  const machine = db.prepare("SELECT token FROM machines WHERE id = ?").get(req.params.id);
+  if (!machine) return res.status(404).json({ error: "Không tìm thấy máy" });
+  res.json(machine);
+});
+
+function machineBusy(id) {
+  return db.prepare("SELECT 1 FROM jobs WHERE machine_id = ? AND status IN ('SENDING','READY','DRAWING','PAUSED') LIMIT 1").get(id);
+}
+
+function revokeMachineConnection(machine) {
+  disconnectMachine(machine.id);
+  if (machine.online) setOffline(machine.id, "ACCESS_REVOKED");
+}
 
 function configuredArea(input, fallback) {
   const width = input.workWidth === undefined ? fallback.width : Number(input.workWidth);
@@ -206,6 +232,7 @@ function configuredArea(input, fallback) {
 
 admin.post("/machines", (req, res) => {
   const id = String(req.body.id || "").trim();
+  if (id.startsWith("server-")) return res.status(400).json({ error: "Tiền tố server- dành cho kết nối nội bộ." });
   if (!/^[a-z0-9-]{2,32}$/.test(id)) return res.status(400).json({ error: "Mã máy chỉ gồm a-z, 0-9, '-' (2–32 ký tự)" });
   if (db.prepare("SELECT 1 FROM machines WHERE id = ?").get(id)) return res.status(409).json({ error: "Mã máy đã tồn tại" });
   const area = configuredArea(req.body, profile.workArea);
@@ -213,25 +240,38 @@ admin.post("/machines", (req, res) => {
   const token = newToken();
   db.prepare("INSERT INTO machines (id, name, token, work_width, work_height) VALUES (?, ?, ?, ?, ?)")
     .run(id, String(req.body.name || id), token, area.width, area.height);
-  res.status(201).json({ machine: db.prepare("SELECT * FROM machines WHERE id = ?").get(id) });
+  res.status(201).json({ machine: publicMachine(id) });
 });
 
 admin.patch("/machines/:id", (req, res) => {
   const m = db.prepare("SELECT * FROM machines WHERE id = ?").get(req.params.id);
   if (!m) return res.status(404).json({ error: "Không tìm thấy máy" });
   const name = req.body.name ?? m.name;
-  const enabled = req.body.enabled === undefined ? m.enabled : Number(Boolean(req.body.enabled));
+  if (req.body.enabled !== undefined && typeof req.body.enabled !== "boolean") {
+    return res.status(400).json({ error: "Trạng thái bật/tắt phải là true hoặc false." });
+  }
+  const enabled = req.body.enabled === undefined ? m.enabled : Number(req.body.enabled);
+  if (enabled !== m.enabled && !config.embeddedBroker) {
+    return res.status(409).json({ error: "Thay quyền kết nối của máy tại MQTT broker ngoài." });
+  }
   const area = configuredArea(req.body, machineArea(m));
   if (!area) return res.status(400).json({ error: "Vùng máy HTrang tối đa 120 × 80 mm, mỗi cạnh tối thiểu 1 mm." });
+  if (m.enabled && !enabled && machineBusy(m.id)) {
+    return res.status(409).json({ error: "Chờ phiên vẽ kết thúc trước khi tắt quyền kết nối của máy." });
+  }
   db.prepare("UPDATE machines SET name = ?, enabled = ?, work_width = ?, work_height = ? WHERE id = ?").run(name, enabled, area.width, area.height, m.id);
-  res.json({ machine: db.prepare("SELECT * FROM machines WHERE id = ?").get(m.id) });
+  if (m.enabled && !enabled) revokeMachineConnection(m);
+  res.json({ machine: publicMachine(m.id) });
 });
 
 admin.post("/machines/:id/token", (req, res) => {
-  const token = newToken();
-  const r = db.prepare("UPDATE machines SET token = ? WHERE id = ?").run(token, req.params.id);
-  if (!r.changes) return res.status(404).json({ error: "Không tìm thấy máy" });
-  res.json({ id: req.params.id, token });
+  const machine = publicMachine(req.params.id);
+  if (!machine) return res.status(404).json({ error: "Không tìm thấy máy" });
+  if (!config.embeddedBroker) return res.status(409).json({ error: "Đổi token của máy tại MQTT broker ngoài." });
+  if (machineBusy(machine.id)) return res.status(409).json({ error: "Chờ phiên vẽ kết thúc trước khi đổi token máy." });
+  db.prepare("UPDATE machines SET token = ? WHERE id = ?").run(newToken(), machine.id);
+  revokeMachineConnection(machine);
+  res.sendStatus(204);
 });
 
 admin.post("/machines/:id/home", wrap(async (req, res) => {
@@ -257,8 +297,8 @@ admin.get("/users", (req, res) => res.json({ users: db.prepare("SELECT id, usern
 
 admin.post("/users", (req, res) => {
   const { username, password, role } = req.body || {};
-  if (!/^[a-zA-Z0-9_.]{3,32}$/.test(username || "") || String(password || "").length < 6) {
-    return res.status(400).json({ error: "Tên 3–32 ký tự, mật khẩu ≥ 6 ký tự" });
+  if (typeof username !== "string" || !/^[a-zA-Z0-9_.]{3,32}$/.test(username) || !validPassword(password)) {
+    return res.status(400).json({ error: "Tên đăng nhập 3–32 ký tự, mật khẩu ít nhất 12 ký tự và tối đa 72 byte." });
   }
   try {
     const r = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)")
@@ -271,13 +311,37 @@ admin.post("/users", (req, res) => {
 
 admin.patch("/users/:id", (req, res) => {
   const id = Number(req.params.id);
-  if (id === req.user.id && req.body.locked) return res.status(400).json({ error: "Không thể tự khóa chính mình" });
+  if ((req.body.locked !== undefined && typeof req.body.locked !== "boolean")
+      || (req.body.role !== undefined && !["user", "admin"].includes(req.body.role))) {
+    return res.status(400).json({ error: "Trạng thái khóa hoặc vai trò không hợp lệ." });
+  }
+  if (id === req.user.id && (req.body.locked || req.body.role === "user")) {
+    return res.status(400).json({ error: "Không thể tự khóa hoặc hạ quyền quản trị của mình." });
+  }
   const u = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
   if (!u) return res.status(404).json({ error: "Không tìm thấy người dùng" });
-  const locked = req.body.locked === undefined ? u.locked : Number(Boolean(req.body.locked));
-  const role = ["user", "admin"].includes(req.body.role) ? req.body.role : u.role;
+  const locked = req.body.locked === undefined ? u.locked : Number(req.body.locked);
+  const role = req.body.role ?? u.role;
   db.prepare("UPDATE users SET locked = ?, role = ? WHERE id = ?").run(locked, role, id);
   res.json({ ok: true });
+});
+
+admin.post("/users/:id/revoke-sessions", (req, res) => {
+  const id = Number(req.params.id);
+  if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(id)) return res.status(404).json({ error: "Không tìm thấy người dùng" });
+  revokeUserSessions(id);
+  res.sendStatus(204);
+});
+
+admin.post("/users/:id/password", (req, res) => {
+  const id = Number(req.params.id);
+  const { password } = req.body || {};
+  if (!validPassword(password)) {
+    return res.status(400).json({ error: "Mật khẩu cần ít nhất 12 ký tự và tối đa 72 byte." });
+  }
+  if (!db.prepare("SELECT 1 FROM users WHERE id = ?").get(id)) return res.status(404).json({ error: "Không tìm thấy người dùng" });
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(bcrypt.hashSync(password, 10), id);
+  res.sendStatus(204);
 });
 
 admin.get("/queue", (req, res) => {

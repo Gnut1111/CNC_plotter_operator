@@ -1,12 +1,13 @@
 # REST API & WebSocket
 
-Mọi API (trừ đăng nhập) cần header `Authorization: Bearer <JWT>`.
+Đăng nhập cấp cookie phiên `HttpOnly`, `SameSite=Strict` và `Secure` khi dùng HTTPS. Các API cần cookie và header `X-Session-Context` lấy từ phản hồi đăng nhập hoặc `/api/auth/me`. Riêng `/api/auth/me` chỉ cần cookie. Giá trị context liên kết yêu cầu với đúng phiên của tab, cookie dùng để xác thực.
 
 ## Xác thực
 | Method | Path | Mô tả |
 |---|---|---|
-| POST | `/api/auth/login` | `{username, password}` → `{token, user}`. Sai → 401 |
-| GET | `/api/auth/me` | Thông tin người dùng hiện tại |
+| POST | `/api/auth/login` | `{username, password}` → `{context, user}`. Sai → 401, bị khóa → 403, đang đăng nhập ở thiết bị khác → 409, vượt giới hạn → 429 |
+| GET | `/api/auth/me` | `{context, user}` của phiên hiện tại |
+| POST | `/api/auth/logout` | Thu hồi phiên trên máy chủ và xóa cookie, trả 204 |
 
 ## Bản vẽ (Image Uploader / Converter / G-code Viewer)
 | Method | Path | Mô tả |
@@ -42,14 +43,19 @@ Trạng thái phiên: `QUEUED → SENDING → READY → DRAWING ⇄ PAUSED → C
 | Method | Path | Mô tả |
 |---|---|---|
 | GET/POST | `/api/admin/machines` | Xem / thêm máy (sinh token MQTT) |
-| PATCH | `/api/admin/machines/:id` | Đổi tên, bật/tắt, vùng vẽ |
-| POST | `/api/admin/machines/:id/token` | Cấp lại token |
+| PATCH | `/api/admin/machines/:id` | Đổi tên, bật/tắt, vùng vẽ. Tắt quyền kết nối khi máy đang xử lý phiên → 409 |
+| GET | `/api/admin/machines/:id/token` | Xem token của một máy |
+| POST | `/api/admin/machines/:id/token` | Cấp lại token, ngắt kết nối đã xác thực bằng token cũ. Máy đang xử lý phiên → 409 |
 | POST | `/api/admin/machines/:id/home` | Gửi lệnh về gốc |
 | GET/POST | `/api/admin/users` | Xem / tạo tài khoản |
-| PATCH | `/api/admin/users/:id` | Khóa/mở khóa, đổi vai trò |
+| PATCH | `/api/admin/users/:id` | Khóa/mở khóa hoặc đổi vai trò và thu hồi phiên khi có thay đổi |
+| POST | `/api/admin/users/:id/revoke-sessions` | Thu hồi phiên của tài khoản |
+| POST | `/api/admin/users/:id/password` | `{password}` → đổi mật khẩu và thu hồi phiên |
 | GET | `/api/admin/queue` | Toàn bộ hàng đợi đang chạy |
 
-## WebSocket `ws://<host>/ws?token=<JWT>`
+## WebSocket `/ws?context=<context>`
+
+Kết nối dùng cookie của cùng host và kiểm tra Origin. Khi phiên bị thu hồi hoặc hết hạn, server ngắt kết nối với mã `4001`.
 Server đẩy `{type, data, ts}`:
 - `machine.status` — máy đổi trạng thái / online / offline (`reason`: `LWT`, `HEARTBEAT_TIMEOUT`)
 - `job.status` — phiên đổi trạng thái/tiến độ (chỉ gửi cho chủ phiên + admin)

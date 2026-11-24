@@ -72,7 +72,7 @@ function normalizeParams(input = {}, workArea) {
 const maxSizeFor = (p) => p.rasterPx ?? 150 + p.detail * 60;
 
 async function loadGray(buffer, maxSize, enlarge = false) {
-  const { data, info } = await sharp(buffer)
+  const { data, info } = await sharp(buffer, { limitInputPixels: 25_000_000 })
     .rotate()
     .flatten({ background: "#ffffff" })
     .resize(maxSize, maxSize, { fit: "inside", withoutEnlargement: !enlarge })

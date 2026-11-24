@@ -20,8 +20,7 @@ const STATUS_VI = {
 const badge = (s) => `<span class="badge ${esc(s)}">${esc(STATUS_VI[s] || s)}</span>`;
 
 const app = {
-  token: localStorage.getItem("token"),
-  user: JSON.parse(localStorage.getItem("user") || "null"),
+  session: null, user: null,
   machines: [], selectedMachine: null, ws: null,
 };
 
@@ -111,13 +110,12 @@ $("#showcaseCard")?.addEventListener("mouseleave", startShowcaseCycle);
 // ---------------- API ----------------
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
-  const token = app.token;
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const session = app.session;
+  if (session) headers["X-Session-Context"] = session;
   if (opts.json !== undefined) { headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
   const res = await fetch(`/api${path}`, { ...opts, headers });
-  if (res.status === 401 && path !== "/auth/login") {
-    if (token === app.token) logout();
-    throw new Error("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+  if (res.status === 401 && session && session === app.session) {
+    clearSession("Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại.");
   }
   const type = res.headers.get("content-type") || "";
   const body = type.includes("json") ? await res.json() : await res.text();
@@ -155,21 +153,42 @@ function toast(text, kind = "", key = null) {
 }
 
 // ---------------- Auth View ----------------
+const sessionChannel = new BroadcastChannel("pixel2plot-session");
+sessionChannel.onmessage = () => location.reload();
+
 $("#loginForm").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const submit = e.submitter || e.currentTarget.querySelector("button[type=submit]");
+  if (submit.disabled) return;
   const f = new FormData(e.target);
+  submit.disabled = true;
   $("#loginError").textContent = "";
   try {
-    const r = await api("/auth/login", { method: "POST", json: { username: f.get("username"), password: f.get("password") } });
-    app.token = r.token; app.user = r.user;
-    localStorage.setItem("token", r.token); localStorage.setItem("user", JSON.stringify(r.user));
-    enterApp();
-  } catch (err) { $("#loginError").textContent = err.message; }
+    const result = await api("/auth/login", { method: "POST", json: { username: f.get("username"), password: f.get("password") } });
+    e.target.reset();
+    openSession(result);
+    sessionChannel.postMessage("login");
+  } catch (err) {
+    $("#loginError").textContent = err.message;
+  } finally {
+    submit.disabled = false;
+  }
 });
 
-function logout() {
-  app.token = null; app.user = null;
-  localStorage.removeItem("token"); localStorage.removeItem("user");
+function openSession({ context, user }) {
+  app.session = context;
+  app.user = user;
+  enterApp();
+}
+
+function clearSession(message = "") {
+  app.session = null;
+  app.user = null;
+  $("#loginError").textContent = message;
+  $("#loginForm").elements.password.value = "";
+  clearMachineToken();
+  $("#resetPassword").close();
+  $("#resetPasswordForm").reset();
   app.ws?.close();
   app.ws = null;
   setConnection(false, "Đang kết nối");
@@ -193,7 +212,20 @@ function logout() {
   setShowcaseSlide(0);
   startShowcaseCycle();
 }
-$("#logoutBtn").onclick = logout;
+$("#logoutBtn").onclick = async (e) => {
+  const button = e.currentTarget;
+  const session = app.session;
+  button.disabled = true;
+  try {
+    await api("/auth/logout", { method: "POST" });
+    if (session === app.session) clearSession();
+    sessionChannel.postMessage("logout");
+  } catch (err) {
+    if (session === app.session) toast("Chưa đăng xuất được. " + err.message, "err");
+  } finally {
+    button.disabled = false;
+  }
+};
 
 function enterApp() {
   stopShowcaseCycle();
@@ -205,12 +237,12 @@ function enterApp() {
   $$(".admin-only").forEach((el) => el.classList.toggle("hidden", app.user.role !== "admin"));
   connectWs();
   pendingSend = readPendingSend();
-  const token = app.token;
+  const session = app.session;
   const machinesReady = loadMachines().catch((err) => toast(err.message, "err"));
   refreshTrackedJob().catch((err) => toast(err.message, "err"));
   draftLoading = true;
-  machinesReady.then(() => app.token === token && restoreDraft()).finally(() => {
-    if (app.token !== token) return;
+  machinesReady.then(() => app.session === session && restoreDraft()).finally(() => {
+    if (app.session !== session) return;
     draftLoading = false;
     syncActions();
   });
@@ -275,18 +307,18 @@ const draftControls = () => [...form.querySelectorAll("input[name], select[name]
 
 function saveDraft() {
   if (!app.user || !file) return;
-  const token = app.token, epoch = ++draftEpoch;
+  const session = app.session, epoch = ++draftEpoch;
   const settings = Object.fromEntries(draftControls().map((el) => [el.name, el.type === "checkbox" ? el.checked : el.value]));
   writeDraft(userKey(), { file, settings, machineId: app.selectedMachine, sentId: sentJob?.id, editor: drawingEditor.snapshot() }).catch(() => {
-    if (app.token === token && epoch === draftEpoch) $("#draftStatus").textContent = "Trình duyệt không lưu được bản nháp.";
+    if (app.session === session && epoch === draftEpoch) $("#draftStatus").textContent = "Trình duyệt không lưu được bản nháp.";
   });
 }
 
 async function restoreDraft() {
-  const token = app.token;
+  const session = app.session;
   try {
     const draft = await readDraft(userKey());
-    if (!draft || token !== app.token || file) return;
+    if (!draft || session !== app.session || file) return;
     for (const el of draftControls()) {
       if (!Object.hasOwn(draft.settings, el.name)) continue;
       if (el.type === "checkbox") el.checked = draft.settings[el.name];
@@ -308,13 +340,13 @@ async function restoreDraft() {
     $("#draftStatus").textContent = "Đã khôi phục bản nháp trên trình duyệt này.";
     syncActions();
   } catch {
-    if (app.token === token) $("#draftStatus").textContent = "Trình duyệt không đọc được bản nháp.";
+    if (app.session === session) $("#draftStatus").textContent = "Trình duyệt không đọc được bản nháp.";
   }
 }
 
 $("#discardDraft").onclick = async () => {
   if (!app.user || pendingSend || sending) return;
-  const token = app.token;
+  const session = app.session;
   try {
     const key = userKey();
     const tracked = activeJob;
@@ -323,7 +355,7 @@ $("#discardDraft").onclick = async () => {
     renderActiveJobBar();
     await deleteDraft(key);
   } catch {
-    if (token === app.token) $("#draftStatus").textContent = "Chưa xóa được bản nháp khỏi trình duyệt.";
+    if (session === app.session) $("#draftStatus").textContent = "Chưa xóa được bản nháp khỏi trình duyệt.";
   }
 };
 
@@ -620,11 +652,11 @@ $("#activeJobBar")?.addEventListener("click", async (e) => {
     openJobDetails(id);
     return;
   }
-  const token = app.token, version = jobVersion;
+  const session = app.session, version = jobVersion;
   btn.disabled = true;
   try {
     const { job } = await api(`/jobs/${id}/${act}`, { method: "POST" });
-    if (app.token !== token || version !== jobVersion) return;
+    if (app.session !== session || version !== jobVersion) return;
     onJobStatus(job);
     const message = act === "cancel" ? (jobNotice(job) || "Đã hủy lượt đang chờ.") :
       `Đã gửi lệnh ${act === "pause" ? "tạm dừng" : "tiếp tục"}.`;
@@ -633,7 +665,7 @@ $("#activeJobBar")?.addEventListener("click", async (e) => {
     toast(err.message, "err");
   } finally {
     btn.disabled = false;
-    if (app.token === token) refreshJobViews();
+    if (app.session === session) refreshJobViews();
   }
 });
 
@@ -1061,7 +1093,7 @@ $("#showSentJob").onclick = () => { if (sentJob) openJobDetails(sentJob.id); };
 $("#sendBtn").onclick = async () => {
   if (sending || (pendingSend ? draftLoading : tuneRequest || sentJob || !preview?.stats.paths || drawingEditor.busy || !app.selectedMachine)) return;
   const current = revision;
-  const token = app.token;
+  const session = app.session;
   const machineId = app.selectedMachine;
   sending = true;
   $("#sendMsg").textContent = pendingSend ? "Đang kiểm tra lần gửi trước…" : "Đang lưu và gửi bản vẽ…";
@@ -1074,7 +1106,7 @@ $("#sendBtn").onclick = async () => {
         const body = uploadData(requestParams, machineId, edits);
         body.append("previewHash", previewHash);
         const result = await api("/drawings", { method: "POST", body });
-        if (app.token !== token) return;
+        if (app.session !== session) return;
         drawingId = result.drawing.id;
         if (current === revision) savedDrawingId = drawingId;
       }
@@ -1083,7 +1115,7 @@ $("#sendBtn").onclick = async () => {
     }
     const version = jobVersion;
     const { job } = await api("/jobs", { method: "POST", json: pendingSend });
-    if (app.token !== token) return;
+    if (app.session !== session) return;
     rememberJob(job.id);
     setPendingSend(null);
     if (current === revision) {
@@ -1097,12 +1129,12 @@ $("#sendBtn").onclick = async () => {
       toast(`Đã nhận phiên #${job.id} · ${job.machine_name}.`, "ok");
     }
   } catch (err) {
-    if (app.token !== token) return;
+    if (app.session !== session) return;
     if (pendingSend && (!err.status || err.status >= 500)) {
       $("#sendMsg").textContent = "Chưa nhận được xác nhận. Chọn Xác nhận lại lần gửi để kiểm tra cùng yêu cầu.";
     } else if (err.status === 409 && !pendingSend && !savedDrawingId) {
       await loadMachines().catch(() => {});
-      if (app.token !== token) return;
+      if (app.session !== session) return;
       schedulePreview({ delay: 0 });
       $("#sendMsg").textContent = "Bản xem trước đã thay đổi. Đang cập nhật…";
     } else {
@@ -1112,17 +1144,17 @@ $("#sendBtn").onclick = async () => {
         : "Chưa nhận được phản hồi từ máy chủ. Hãy thử gửi lại.";
     }
   } finally {
-    if (app.token === token) { sending = false; syncActions(); }
+    if (app.session === session) { sending = false; syncActions(); }
   }
 };
 
 // ---------------- Machine Selector & Hardware Fleet View ----------------
 async function loadMachines() {
-  const token = app.token;
+  const session = app.session;
   const previous = app.selectedMachine;
   const area = workArea();
   const { machines } = await api("/machines");
-  if (token !== app.token) return;
+  if (session !== app.session) return;
   app.machines = machines;
   if (!machines.some((m) => m.id === app.selectedMachine)) {
     const online = machines.filter((m) => m.online);
@@ -1323,10 +1355,10 @@ $("#jobFilterBar")?.addEventListener("click", (e) => {
 });
 
 async function loadJobs() {
-  const request = ++jobsRequest, token = app.token;
+  const request = ++jobsRequest, session = app.session;
   const all = $("#allJobs").checked ? "?all=1" : "";
   const { jobs } = await api(`/jobs${all}`);
-  if (request !== jobsRequest || token !== app.token) return;
+  if (request !== jobsRequest || session !== app.session) return;
   cachedJobs = jobs;
   renderJobsTable();
 }
@@ -1484,13 +1516,13 @@ jobsBody.addEventListener("click", async (event) => {
   if (pendingJobActions.has(id)) return;
   pendingJobActions.add(id);
   button.closest("tr").querySelectorAll("[data-act]").forEach((action) => { action.disabled = true; });
-  const token = app.token, version = jobVersion;
+  const session = app.session, version = jobVersion;
   let updated;
   try { ({ job: updated } = await api(`/jobs/${id}/${button.dataset.act}`, { method: "POST" })); }
   catch (err) { toast(err.message, "err"); }
   finally {
     pendingJobActions.delete(id);
-    if (app.token === token) {
+    if (app.session === session) {
       if (updated && version === jobVersion) onJobStatus(updated);
       else $(`#job-${id}`)?.querySelectorAll("[data-act]").forEach((action) => { action.disabled = false; });
       refreshJobViews();
@@ -1523,16 +1555,16 @@ function replaceJobRow(job) {
 // ---------------- Admin Dashboard ----------------
 async function loadAdmin() {
   if (app.user?.role !== "admin") return;
-  const token = app.token;
+  const session = app.session;
   const [{ machines }, { users }, { jobs }] = await Promise.all([api("/admin/machines"), api("/admin/users"), api("/admin/queue")]);
-  if (token !== app.token) return;
+  if (session !== app.session) return;
   if ($("#admMachinesCount")) $("#admMachinesCount").textContent = String(machines.length);
   if ($("#admUsersCount")) $("#admUsersCount").textContent = String(users.length);
   if ($("#admQueueCount")) $("#admQueueCount").textContent = String(jobs.length);
 
   $("#admMachines").innerHTML = machines.map((m) => `<tr>
     <td><code>${esc(m.id)}</code></td><td><strong>${esc(m.name)}</strong></td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " · Tắt"}</td>
-    <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><code>${esc(m.token)}</code></td>
+    <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><button type="button" class="small ghost" data-m="${esc(m.id)}" data-a="show-token">Xem token</button></td>
     <td class="col-actions"><div class="admin-row-actions">${m.needs_inspection && m.online && m.state === "IDLE"
           ? `<button class="small" data-m="${esc(m.id)}" data-a="inspection">Xác nhận đã kiểm tra giấy</button>` : ""}
         <button class="small ghost" data-m="${esc(m.id)}" data-a="home">Về gốc</button>
@@ -1540,15 +1572,40 @@ async function loadAdmin() {
         <button class="small ${m.enabled ? "danger" : "ghost"}" data-m="${esc(m.id)}" data-a="toggle" data-en="${m.enabled}">${m.enabled ? "Tắt" : "Bật"}</button></div></td></tr>`).join("");
   $("#admUsers").innerHTML = users.map((u) => `<tr>
     <td class="col-id tabular-nums">${u.id}</td><td><strong>${esc(u.username)}</strong></td><td><code>${u.role}</code></td><td>${u.locked ? badge("FAILED").replace("Lỗi", "Đã khóa") : badge("IDLE").replace("Sẵn sàng", "Hoạt động")}</td>
-    <td class="col-actions"><div class="admin-row-actions"><button class="small ${u.locked ? "ghost" : "danger"}" data-u="${u.id}" data-locked="${u.locked}">${u.locked ? "Mở khóa" : "Khóa"}</button></div></td></tr>`).join("");
+    <td class="col-actions"><div class="admin-row-actions">
+      <button class="small ghost" data-u="${u.id}" data-a="password" data-name="${esc(u.username)}">Đặt lại mật khẩu</button>
+      <button class="small ghost" data-u="${u.id}" data-a="revoke" data-name="${esc(u.username)}">Đăng xuất mọi thiết bị</button>
+      ${u.id === app.user.id ? "" : `<button class="small ${u.locked ? "ghost" : "danger"}" data-u="${u.id}" data-a="lock" data-locked="${u.locked}">${u.locked ? "Mở khóa" : "Khóa"}</button>`}
+    </div></td></tr>`).join("");
   $("#admQueue").innerHTML = jobs.map((j) => `<tr><td class="col-id tabular-nums">${j.id}</td><td><code>${esc(j.machine_id)}</code></td><td>${esc(j.drawing_name)}</td><td>${esc(j.username)}</td><td>${badge(j.status)}</td></tr>`).join("")
     || `<tr><td colspan="5" class="muted table-empty-cell">Hàng đợi hệ thống đang trống.</td></tr>`;
 }
 
+const machineTokenDialog = $("#machineToken");
+const machineTokenValue = $("#machineTokenValue");
+
+function clearMachineToken() {
+  machineTokenValue.value = "";
+  machineTokenDialog.close();
+}
+
+machineTokenDialog.addEventListener("close", () => { machineTokenValue.value = ""; });
+
 $("#admMachines").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-m]");
   if (!b) return;
+  const session = app.session;
+  b.disabled = true;
   try {
+    if (b.dataset.a === "show-token") {
+      const { token } = await api(`/admin/machines/${b.dataset.m}/token`);
+      if (session !== app.session) return;
+      $("#machineTokenTitle").textContent = `Token MQTT · ${b.dataset.m}`;
+      machineTokenValue.value = token;
+      if (!machineTokenDialog.open) machineTokenDialog.showModal();
+      machineTokenValue.select();
+      return;
+    }
     if (b.dataset.a === "inspection") {
       if (!confirm("Bạn đã kiểm tra giấy và vùng vẽ tại máy? Lượt kế tiếp có thể bắt đầu ngay.")) return;
       await api(`/admin/machines/${b.dataset.m}/inspection`, { method: "POST" });
@@ -1560,15 +1617,72 @@ $("#admMachines").addEventListener("click", async (e) => {
       toast("Đã cấp token mới", "ok");
     }
     if (b.dataset.a === "toggle") await api(`/admin/machines/${b.dataset.m}`, { method: "PATCH", json: { enabled: b.dataset.en !== "1" } });
-    loadAdmin();
-  } catch (err) { toast(err.message, "err"); }
+    if (session === app.session) await loadAdmin();
+  } catch (err) { if (session === app.session) toast(err.message, "err"); }
+  finally { b.disabled = false; }
 });
+
+const resetPasswordDialog = $("#resetPassword");
+const resetPasswordForm = $("#resetPasswordForm");
+resetPasswordDialog.addEventListener("close", () => resetPasswordForm.reset());
 
 $("#admUsers").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-u]");
   if (!b) return;
-  try { await api(`/admin/users/${b.dataset.u}`, { method: "PATCH", json: { locked: b.dataset.locked !== "1" } }); loadAdmin(); }
-  catch (err) { toast(err.message, "err"); }
+  if (b.dataset.a === "password") {
+    resetPasswordForm.reset();
+    resetPasswordForm.dataset.user = b.dataset.u;
+    $("#resetPasswordError").textContent = "";
+    $("#resetPasswordTitle").textContent = `Đặt lại mật khẩu · ${b.dataset.name}`;
+    resetPasswordDialog.showModal();
+    return;
+  }
+
+  const session = app.session;
+  b.disabled = true;
+  try {
+    if (b.dataset.a === "revoke") {
+      if (!confirm(`Đăng xuất ${b.dataset.name} khỏi tất cả thiết bị?`)) return;
+      await api(`/admin/users/${b.dataset.u}/revoke-sessions`, { method: "POST" });
+      if (session !== app.session) return;
+      if (Number(b.dataset.u) === app.user.id) {
+        clearSession("Đã đăng xuất tất cả thiết bị.");
+        sessionChannel.postMessage("logout");
+        return;
+      }
+      toast("Đã thu hồi tất cả phiên đăng nhập.", "ok");
+    } else {
+      await api(`/admin/users/${b.dataset.u}`, { method: "PATCH", json: { locked: b.dataset.locked !== "1" } });
+    }
+    if (session === app.session) await loadAdmin();
+  } catch (err) { if (session === app.session) toast(err.message, "err"); }
+  finally { b.disabled = false; }
+});
+
+resetPasswordForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const session = app.session;
+  const button = e.submitter || resetPasswordForm.querySelector("button[type=submit]");
+  if (button.disabled) return;
+  const id = resetPasswordForm.dataset.user;
+  button.disabled = true;
+  $("#resetPasswordError").textContent = "";
+  try {
+    const password = new FormData(resetPasswordForm).get("password");
+    await api(`/admin/users/${id}/password`, { method: "POST", json: { password } });
+    if (session !== app.session) return;
+    resetPasswordDialog.close();
+    if (Number(id) === app.user.id) {
+      clearSession("Đã đổi mật khẩu. Vui lòng đăng nhập lại.");
+      sessionChannel.postMessage("logout");
+    } else {
+      toast("Đã đặt lại mật khẩu và thu hồi các phiên cũ.", "ok");
+    }
+  } catch (err) {
+    if (session === app.session) $("#resetPasswordError").textContent = err.message;
+  } finally {
+    button.disabled = false;
+  }
 });
 
 $("#addMachineForm").addEventListener("submit", async (e) => {
@@ -1592,7 +1706,7 @@ function rememberJob(id) {
 }
 
 async function refreshTrackedJob() {
-  const token = app.token;
+  const session = app.session;
   const current = sentJob || activeJob;
   let id = current?.id;
   if (!id) {
@@ -1603,14 +1717,14 @@ async function refreshTrackedJob() {
   const version = jobVersion;
   try {
     const { job } = await api(`/jobs/${id}`);
-    if (token !== app.token || version !== jobVersion) return;
+    if (session !== app.session || version !== jobVersion) return;
     if (sentJob?.id === id) sentJob = job;
     activeJob = job;
     trackingReady = liveConnected;
     renderActiveJobBar();
     replaceJobRow(job);
   } catch (error) {
-    if (token !== app.token || version !== jobVersion) return;
+    if (session !== app.session || version !== jobVersion) return;
     if (error.status !== 404) throw error;
     try { localStorage.removeItem(storageKey("job")); } catch {}
     if (sentJob?.id === id) sentJob = null;
@@ -1620,10 +1734,10 @@ async function refreshTrackedJob() {
 }
 
 function refreshJobViews() {
-  const token = app.token;
+  const session = app.session;
   clearTimeout(refreshTimer);
   refreshTimer = setTimeout(() => {
-    if (token !== app.token) return;
+    if (session !== app.session) return;
     refreshTrackedJob().catch((err) => toast(err.message, "err"));
     if (jobDetails.open) loadJobDetails(jobDetails.dataset.jobId);
     if (!$("#tab-jobs").classList.contains("hidden")) loadJobs().catch((err) => toast(err.message, "err"));
@@ -1643,14 +1757,18 @@ function setConnection(connected, label) {
 
 function connectWs() {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(app.token)}`);
+  const ws = new WebSocket(`${proto}://${location.host}/ws?context=${encodeURIComponent(app.session)}`);
   app.ws = ws;
-  ws.onclose = () => {
+  ws.onclose = (e) => {
     if (app.ws !== ws) return;
+    if (e.code === 4001) {
+      clearSession("Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại.");
+      return;
+    }
     setConnection(false, "Mất cập nhật trực tiếp");
     for (const button of jobsBody.querySelectorAll("[data-act]:not(.danger)")) button.disabled = true;
-    if (app.token) setTimeout(() => {
-      if (app.token && app.ws === ws) connectWs();
+    if (app.session) setTimeout(() => {
+      if (app.session && app.ws === ws) connectWs();
     }, 2000);
   };
   ws.onmessage = (ev) => {
@@ -1714,5 +1832,22 @@ $$("input[type=range]").forEach((r) => {
   updateSliderTrack(r);
   r.addEventListener("input", () => updateSliderTrack(r));
 });
-if (app.token && app.user) enterApp(); else logout();
+async function restoreSession() {
+  const button = $("#loginForm button[type=submit]");
+  button.disabled = true;
+  try {
+    openSession(await api("/auth/me"));
+  } catch (err) {
+    clearSession(err.status === 401 ? "" : err.message);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+try {
+  localStorage.removeItem("token");
+  localStorage.removeItem("user");
+} catch { /* Storage can be disabled by the browser. */ }
+window.addEventListener("pageshow", (e) => { if (e.persisted) location.reload(); });
+restoreSession();
 drawPreview();

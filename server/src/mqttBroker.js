@@ -1,23 +1,49 @@
 // MQTT Broker nhúng (aedes): xác thực bằng token máy + phân quyền topic theo từng máy
 const net = require("net");
-const Aedes = require("aedes");
 const config = require("./config");
 const { db } = require("./db");
 
-function startBroker() {
-  const broker = Aedes();
+let broker;
+const findMachine = db.prepare("SELECT id, token, enabled FROM machines WHERE id = ?");
+const serverClientId = `server-${process.pid}`;
+const ownOutput = (id, topic) => topic === `cnc/${id}/cmd` || topic === `cnc/${id}/file`;
+
+function machineAuthorized(client) {
+  const m = findMachine.get(client.machineId);
+  return m?.enabled && m.token === client.machineToken;
+}
+
+function disconnectMachine(id) {
+  const client = broker?.clients[id];
+  if (client?.role === "machine") client.close();
+}
+
+async function startBroker() {
+  const { Aedes } = await import("aedes");
+  broker = await Aedes.createBroker();
+
+  broker.preConnect = (client, packet, done) => {
+    const will = packet.will;
+    if (!will || (will.topic === `cnc/${packet.clientId}/status` && will.payload.length <= 4096 && !will.retain)) {
+      return done(null, true);
+    }
+    const err = new Error("Invalid will");
+    err.returnCode = 5;
+    done(err, false);
+  };
 
   // Máy đăng nhập bằng username = mã máy, password = token máy (do Admin cấp)
   broker.authenticate = (client, username, password, done) => {
     const pass = password ? password.toString() : "";
-    if (username === config.serverMqttUser && pass === config.serverMqttPass) {
+    if (client.id === serverClientId && username === config.serverMqttUser && pass === config.serverMqttPass) {
       client.role = "server";
       return done(null, true);
     }
-    const m = db.prepare("SELECT id, token, enabled FROM machines WHERE id = ?").get(String(username || ""));
-    if (m && m.enabled && m.token === pass && client.id === m.id) {
+    const m = findMachine.get(String(username || ""));
+    if (m && m.enabled && m.token === pass && client.id === m.id && !m.id.startsWith("server-")) {
       client.role = "machine";
       client.machineId = m.id;
+      client.machineToken = pass;
       return done(null, true);
     }
     const err = new Error("Auth error");
@@ -27,21 +53,27 @@ function startBroker() {
 
   // Máy chỉ được publish lên cnc/<id>/status của chính nó
   broker.authorizePublish = (client, packet, done) => {
-    if (!client || client.role === "server") return done(null);
-    if (packet.topic === `cnc/${client.machineId}/status`) return done(null);
+    if (client?.role === "server") return done(null);
+    if (client?.role === "machine" && machineAuthorized(client) && !packet.retain && packet.topic === `cnc/${client.machineId}/status`
+        && packet.payload.length <= 4096) return done(null);
     done(new Error("Publish not allowed"));
   };
 
   // Máy chỉ được subscribe cnc/<id>/cmd và cnc/<id>/file của chính nó
   broker.authorizeSubscribe = (client, sub, done) => {
     if (client.role === "server") return done(null, sub);
-    const ok = [`cnc/${client.machineId}/cmd`, `cnc/${client.machineId}/file`].includes(sub.topic);
+    const ok = machineAuthorized(client) && ownOutput(client.machineId, sub.topic);
     done(ok ? null : new Error("Subscribe not allowed"), ok ? sub : null);
+  };
+
+  broker.authorizeForward = (client, packet) => {
+    if (client.role === "server" || (machineAuthorized(client) && ownOutput(client.machineId, packet.topic))) return packet;
+    return null;
   };
 
   const server = net.createServer(broker.handle);
   server.on("error", (e) => portError(e, config.mqttPort, "MQTT_PORT"));
-  server.listen(config.mqttPort, () => console.log(`[mqtt] broker listening on :${config.mqttPort}`));
+  server.listen(config.mqttPort, config.mqttHost, () => console.log(`[mqtt] broker listening on ${config.mqttHost}:${config.mqttPort}`));
   return broker;
 }
 
@@ -54,4 +86,4 @@ function portError(e, port, envName) {
   process.exit(1);
 }
 
-module.exports = { startBroker, portError };
+module.exports = { startBroker, portError, disconnectMachine, serverClientId };

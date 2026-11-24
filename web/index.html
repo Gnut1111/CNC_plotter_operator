@@ -43,7 +43,7 @@
             <span class="wordmark-text">pixel2plot</span>
           </div>
 
-          <form id="loginForm" class="login-form-clean">
+          <form id="loginForm" method="post" class="login-form-clean">
             <div class="login-heading anim-stagger-2">
               <h1>Đăng nhập vào Pixel2Plot</h1>
               <p class="muted">Không gian làm việc và điều khiển máy vẽ trực tuyến</p>
@@ -796,11 +796,11 @@
                   <tbody id="admUsers"></tbody>
                 </table>
               </div>
-              <form id="addUserForm" class="admin-add-bar admin-add-user" autocomplete="off">
+              <form id="addUserForm" method="post" class="admin-add-bar admin-add-user" autocomplete="off">
                 <span class="add-bar-label">Tạo tài khoản mới</span>
                 <div class="add-user-fields">
                   <input name="username" placeholder="Tên đăng nhập" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" required />
-                  <input name="password" type="password" placeholder="Mật khẩu ≥ 6 ký tự" autocomplete="new-password" required />
+                  <input name="password" type="password" placeholder="Mật khẩu từ 12 ký tự" autocomplete="new-password" minlength="12" required />
                   <select name="role" aria-label="Vai trò">
                     <option value="user">user</option>
                     <option value="admin">admin</option>
@@ -850,6 +850,33 @@
       </form>
     </div>
     <div id="jobDetailsBody" class="dialog-body" role="status"></div>
+  </dialog>
+
+  <dialog id="machineToken" aria-labelledby="machineTokenTitle">
+    <div class="dialog-header">
+      <h2 id="machineTokenTitle">Token MQTT</h2>
+      <form method="dialog"><button type="submit" class="small ghost">Đóng</button></form>
+    </div>
+    <div class="security-dialog-body">
+      <label>Token của thiết bị
+        <input type="text" id="machineTokenValue" readonly autocomplete="off" spellcheck="false" />
+      </label>
+    </div>
+  </dialog>
+
+  <dialog id="resetPassword" aria-labelledby="resetPasswordTitle">
+    <div class="dialog-header">
+      <h2 id="resetPasswordTitle">Đặt lại mật khẩu</h2>
+      <form method="dialog"><button type="submit" class="small ghost">Đóng</button></form>
+    </div>
+    <form id="resetPasswordForm" method="post" class="security-dialog-body">
+      <label>Mật khẩu mới
+        <input name="password" type="password" minlength="12" autocomplete="new-password" required />
+      </label>
+      <p class="muted">Tài khoản sẽ được đăng xuất khỏi tất cả thiết bị.</p>
+      <p id="resetPasswordError" class="error" role="alert"></p>
+      <button type="submit" class="primary">Đặt lại mật khẩu</button>
+    </form>
   </dialog>
 
   <!-- Notification Toast UI -->
