@@ -283,7 +283,7 @@
         </div>
 
         <div class="grid-draw">
-          <!-- Main Left Column: Preview Viewport -->
+          <!-- Main Left Column: Full-Height Preview Viewport -->
           <section class="draw-viewport card" aria-label="Xem trước bản vẽ">
             <div class="viewport-header">
               <div class="source-picker">
@@ -314,26 +314,71 @@
 
             <p id="fileError" class="error banner-error" role="alert" hidden></p>
 
+            <!-- Unified Single-Row Studio Bar (Desktop: 40px, Mobile: 2 clean rows) -->
             <div id="drawingEditor" class="drawing-editor" aria-label="Công cụ chỉnh bản vẽ" hidden>
-              <div class="drawing-editor-row">
+              <div class="drawing-editor-group editor-tools-group">
                 <div class="segmented" role="group" aria-label="Công cụ trên bàn vẽ">
-                  <button type="button" data-edit-tool="crop" aria-pressed="false">Cắt vùng</button>
-                  <button type="button" data-edit-tool="erase" aria-pressed="false">Tẩy</button>
-                  <button type="button" data-edit-tool="stroke" aria-pressed="false">Xóa nét</button>
+                  <button type="button" data-edit-tool="crop" aria-pressed="false">
+                    <svg class="tool-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"></path>
+                      <path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"></path>
+                    </svg>
+                    <span>Cắt vùng</span>
+                  </button>
+                  <button type="button" data-edit-tool="erase" aria-pressed="false">
+                    <svg class="tool-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M20 20H7L3 16c-.6-.6-.6-1.5 0-2.1l10-10c.6-.6 1.5-.6 2.1 0l6 6c.6.6.6 1.5 0 2.1L13 20"></path>
+                    </svg>
+                    <span>Tẩy</span>
+                  </button>
+                  <button type="button" data-edit-tool="stroke" aria-pressed="false">
+                    <svg class="tool-ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M18 6L6 18"></path>
+                      <path d="M6 6l12 12"></path>
+                    </svg>
+                    <span>Xóa nét</span>
+                  </button>
                 </div>
-                <div class="segmented" role="group" aria-label="Thu phóng bản vẽ">
-                  <button type="button" id="drawingZoomOut" aria-label="Thu nhỏ">−</button>
-                  <button type="button" id="drawingZoomReset" title="Vừa khung">100%</button>
-                  <button type="button" id="drawingZoomIn" aria-label="Phóng to">+</button>
+
+                <span class="editor-divider" aria-hidden="true"></span>
+
+                <div class="editor-history-cluster">
+                  <button type="button" class="small ghost editor-icon-btn" id="drawingUndo" title="Hoàn tác (Ctrl/Cmd + Z)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M3 7v6h6"></path>
+                      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+                    </svg>
+                    <span>Hoàn tác</span>
+                  </button>
+                  <button type="button" class="small ghost editor-icon-btn" id="drawingRedo" title="Làm lại (Ctrl/Cmd + Shift + Z)">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 7v6h-6"></path>
+                      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
+                    </svg>
+                    <span>Làm lại</span>
+                  </button>
+                  <details id="drawingHistory" class="editor-history-menu">
+                    <summary>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9"></circle>
+                        <polyline points="12 7 12 12 15 14"></polyline>
+                      </svg>
+                      <span>Lịch sử</span>
+                      <svg class="history-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                      </svg>
+                    </summary>
+                    <div id="drawingVersions" class="drawing-versions"></div>
+                  </details>
                 </div>
               </div>
-              <div class="drawing-editor-row">
-                <button type="button" class="small" id="drawingUndo" title="Ctrl hoặc Cmd + Z">Hoàn tác</button>
-                <button type="button" class="small" id="drawingRedo" title="Ctrl hoặc Cmd + Shift + Z">Làm lại</button>
-                <details id="drawingHistory">
-                  <summary>Lịch sử chỉnh sửa</summary>
-                  <div id="drawingVersions" class="drawing-versions"></div>
-                </details>
+
+              <div class="drawing-editor-group editor-zoom-group">
+                <div class="segmented zoom-segmented" role="group" aria-label="Thu phóng bản vẽ">
+                  <button type="button" id="drawingZoomOut" aria-label="Thu nhỏ">−</button>
+                  <button type="button" id="drawingZoomReset" class="tabular-nums" title="Vừa khung">100%</button>
+                  <button type="button" id="drawingZoomIn" aria-label="Phóng to">+</button>
+                </div>
               </div>
             </div>
 
@@ -358,24 +403,27 @@
               </div>
             </div>
 
+            <!-- Contextual Tool Options Strip (Brush size / Crop actions) -->
             <div id="drawingEditorOptions" class="drawing-editor-options" hidden>
-              <label id="drawingBrush" hidden>Đường kính tẩy
+              <label id="drawingBrush" hidden>
+                <span class="brush-label">Đường kính tẩy</span>
                 <input id="drawingBrushSize" type="range" min="0.5" max="20" step="0.5" value="4" />
-                <output id="drawingBrushValue" for="drawingBrushSize">4 mm</output>
+                <output id="drawingBrushValue" class="val-pill tabular-nums" for="drawingBrushSize">4 mm</output>
               </label>
               <div id="drawingCropActions" class="drawing-crop-actions" hidden>
-                <button type="button" class="small" id="drawingApplyCrop">Áp dụng cắt</button>
-                <button type="button" class="small" id="drawingCancelCrop">Hủy</button>
+                <button type="button" class="small primary" id="drawingApplyCrop">Áp dụng cắt</button>
+                <button type="button" class="small ghost" id="drawingCancelCrop">Hủy</button>
               </div>
               <p id="drawingEditStatus" class="muted" role="status"></p>
             </div>
 
+            <!-- Playback Scrubber -->
             <div id="playbackControls" class="playback-controls" hidden>
-              <button type="button" id="playbackBtn" class="small">Phát</button>
+              <button type="button" id="playbackBtn" class="small primary">Phát</button>
               <select id="playbackSpeed" aria-label="Tốc độ mô phỏng">
+                <option value="0.1">0,1×</option>
                 <option value="0.5">0,5×</option>
                 <option value="1" selected>1×</option>
-                <option value="1.5">1,5×</option>
                 <option value="2">2×</option>
               </select>
               <input id="playbackPosition" type="range" min="0" max="10000" value="0" aria-label="Vị trí mô phỏng theo quãng đường" />
@@ -386,7 +434,7 @@
               <p>Phát nhanh đường bút trên web. Máy vẽ không di chuyển.</p>
             </div>
 
-            <!-- Viewport Footer: Status & Metrics -->
+            <!-- Viewport Footer: Crisp Single-Row CAD Status Bar -->
             <div class="viewport-footer">
               <div class="status-row">
                 <div id="convertMsg" class="preview-status" role="status"></div>
@@ -572,7 +620,7 @@
               </form>
             </section>
 
-            <!-- Ultra-Compact Bottom Pinned Machine Dispatch Dock (No redundant title bar, zero repeated warnings) -->
+            <!-- Ultra-Compact Bottom Pinned Machine Dispatch Dock -->
             <section class="card dispatch-card" aria-labelledby="machineTitle">
               <div class="dispatch-body">
                 <div class="dispatch-head-row">
@@ -611,19 +659,39 @@
         </div>
       </div>
 
-      <!-- Tab 2: Job List + Job Control -->
-      <div id="tab-jobs" class="tab tab-padded hidden">
-        <div class="page-header">
+      <!-- Tab 2: Edge-to-Edge Jobs Workspace (Zero Cardception + Filter Pills) -->
+      <div id="tab-jobs" class="tab tab-flat hidden">
+        <div class="flat-page-header">
           <div>
             <h1 class="page-title">Phiên vẽ</h1>
-            <p class="muted page-subtitle">Theo dõi tiến độ và điều khiển các phiên vẽ.</p>
+            <p class="muted page-subtitle">Theo dõi tiến độ và điều khiển các lệnh vẽ trên máy.</p>
           </div>
           <label class="check admin-only filter-pill">
             <input type="checkbox" id="allJobs" />
             <span>Xem tất cả người dùng</span>
           </label>
         </div>
-        <div class="card jobs-card">
+
+        <div class="jobs-toolbar" id="jobFilterBar" role="tablist" aria-label="Lọc phiên vẽ theo trạng thái">
+          <button type="button" class="filter-chip active" data-job-filter="all" role="tab" aria-selected="true">
+            <span>Tất cả</span>
+            <span class="chip-count tabular-nums" id="jobCountAll">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-job-filter="active" role="tab" aria-selected="false">
+            <span>Đang chạy</span>
+            <span class="chip-count tabular-nums" id="jobCountActive">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-job-filter="done" role="tab" aria-selected="false">
+            <span>Hoàn thành</span>
+            <span class="chip-count tabular-nums" id="jobCountDone">0</span>
+          </button>
+          <button type="button" class="filter-chip" data-job-filter="ended" role="tab" aria-selected="false">
+            <span>Hủy / Lỗi</span>
+            <span class="chip-count tabular-nums" id="jobCountEnded">0</span>
+          </button>
+        </div>
+
+        <div class="flat-table-surface jobs-card">
           <div class="table-wrap">
             <table class="table jobs-table">
               <thead>
@@ -644,33 +712,40 @@
         </div>
       </div>
 
-      <!-- Tab 3: Machine Cards -->
-      <div id="tab-machines" class="tab tab-padded hidden">
-        <div class="page-header">
+      <!-- Tab 3: Hardware Machines View (Proportional Bed SVG + Direct Dispatch Action) -->
+      <div id="tab-machines" class="tab tab-flat hidden">
+        <div class="flat-page-header">
           <div>
             <h1 class="page-title">Máy vẽ</h1>
-            <p class="muted page-subtitle">Trạng thái kết nối, vùng vẽ và hàng đợi của từng máy.</p>
+            <p class="muted page-subtitle">Trạng thái kết nối, khổ bàn vẽ và hàng đợi từng thiết bị.</p>
           </div>
+          <div id="machinesSummary" class="fleet-summary-pills tabular-nums"></div>
         </div>
-        <div id="machineCards" class="machine-cards"></div>
+        <div class="flat-page-body">
+          <div id="machineCards" class="machine-list"></div>
+        </div>
       </div>
 
-      <!-- Tab 4: Admin Dashboard -->
-      <div id="tab-admin" class="tab tab-padded hidden">
-        <div class="page-header">
+      <!-- Tab 4: Enterprise Admin Workspace (Flat Sections, 2-Tier Asymmetric Split, Autofill-Proof Open Forms) -->
+      <div id="tab-admin" class="tab tab-flat hidden">
+        <div class="flat-page-header">
           <div>
             <h1 class="page-title">Quản trị hệ thống</h1>
-            <p class="muted page-subtitle">Quản lý máy vẽ, tài khoản và hàng đợi hệ thống.</p>
+            <p class="muted page-subtitle">Quản lý thiết bị máy vẽ, phân quyền người dùng và hàng đợi vận hành.</p>
           </div>
         </div>
-        <div class="grid-admin">
-          <div class="card admin-machines-card">
-            <div class="pane-title">
-              <h2>Quản lý máy vẽ</h2>
-              <span class="pane-caption muted">Danh sách thiết bị</span>
+
+        <div class="admin-workspace">
+          <!-- Tier 1: Full-width Machines Management -->
+          <section class="admin-section admin-machines-card">
+            <div class="admin-section-header">
+              <div class="section-title-group">
+                <h2>Quản lý máy vẽ</h2>
+                <span class="section-count tabular-nums" id="admMachinesCount">0</span>
+              </div>
             </div>
             <div class="table-wrap">
-              <table class="table">
+              <table class="table admin-table">
                 <thead>
                   <tr>
                     <th>Mã máy</th>
@@ -678,70 +753,85 @@
                     <th>Trạng thái</th>
                     <th>Vùng vẽ · mm</th>
                     <th>Token</th>
-                    <th>Thao tác</th>
+                    <th class="col-actions">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody id="admMachines"></tbody>
               </table>
             </div>
-            <form id="addMachineForm" class="row inline-form">
-              <input name="id" placeholder="Mã máy" required />
-              <input name="name" placeholder="Tên hiển thị" />
-              <input name="workWidth" type="number" placeholder="Rộng mm" value="120" min="1" max="120" step="any" />
-              <input name="workHeight" type="number" placeholder="Cao mm" value="80" min="1" max="80" step="any" />
+            <form id="addMachineForm" class="admin-add-bar admin-add-machine" autocomplete="off">
+              <span class="add-bar-label">Thêm máy mới</span>
+              <input name="id" placeholder="Mã máy (vd: cnc-02)" autocomplete="off" required />
+              <input name="name" placeholder="Tên hiển thị" autocomplete="off" />
+              <div class="add-dim-pair">
+                <input name="workWidth" type="number" placeholder="Rộng" aria-label="Chiều rộng mm" value="120" min="1" max="120" step="any" />
+                <span class="dim-x" aria-hidden="true">×</span>
+                <input name="workHeight" type="number" placeholder="Cao" aria-label="Chiều cao mm" value="80" min="1" max="80" step="any" />
+                <span class="dim-unit" aria-hidden="true">mm</span>
+              </div>
               <button class="primary" type="submit">Thêm máy</button>
             </form>
-          </div>
+          </section>
 
-          <div class="card admin-users-card">
-            <div class="pane-title">
-              <h2>Quản lý người dùng</h2>
-              <span class="pane-caption muted">Tài khoản vận hành &amp; quản trị</span>
-            </div>
-            <div class="table-wrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Tên tài khoản</th>
-                    <th>Vai trò</th>
-                    <th>Trạng thái</th>
-                    <th>Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody id="admUsers"></tbody>
-              </table>
-            </div>
-            <form id="addUserForm" class="row inline-form">
-              <input name="username" placeholder="Tên đăng nhập" required />
-              <input name="password" type="password" placeholder="Mật khẩu ≥ 6 ký tự" required />
-              <select name="role">
-                <option value="user">user</option>
-                <option value="admin">admin</option>
-              </select>
-              <button class="primary" type="submit">Tạo tài khoản</button>
-            </form>
-          </div>
+          <!-- Tier 2: Asymmetric 2-Column Split (Users + System Queue) -->
+          <div class="admin-split-row">
+            <section class="admin-section admin-users-card">
+              <div class="admin-section-header">
+                <div class="section-title-group">
+                  <h2>Quản lý người dùng</h2>
+                  <span class="section-count tabular-nums" id="admUsersCount">0</span>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="table admin-table">
+                  <thead>
+                    <tr>
+                      <th class="col-id">#</th>
+                      <th>Tên tài khoản</th>
+                      <th>Vai trò</th>
+                      <th>Trạng thái</th>
+                      <th class="col-actions">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admUsers"></tbody>
+                </table>
+              </div>
+              <form id="addUserForm" class="admin-add-bar admin-add-user" autocomplete="off">
+                <span class="add-bar-label">Tạo tài khoản mới</span>
+                <div class="add-user-fields">
+                  <input name="username" placeholder="Tên đăng nhập" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" required />
+                  <input name="password" type="password" placeholder="Mật khẩu ≥ 6 ký tự" autocomplete="new-password" required />
+                  <select name="role" aria-label="Vai trò">
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <button class="primary" type="submit">Tạo tài khoản</button>
+                </div>
+              </form>
+            </section>
 
-          <div class="card admin-queue-card">
-            <div class="pane-title">
-              <h2>Hàng đợi hệ thống</h2>
-              <span class="pane-caption muted">Lệnh đang chờ xử lý</span>
-            </div>
-            <div class="table-wrap">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Máy</th>
-                    <th>Bản vẽ</th>
-                    <th>Người gửi</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody id="admQueue"></tbody>
-              </table>
-            </div>
+            <section class="admin-section admin-queue-card">
+              <div class="admin-section-header">
+                <div class="section-title-group">
+                  <h2>Hàng đợi hệ thống</h2>
+                  <span class="section-count tabular-nums" id="admQueueCount">0</span>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="table admin-table">
+                  <thead>
+                    <tr>
+                      <th class="col-id">#</th>
+                      <th>Máy</th>
+                      <th>Bản vẽ</th>
+                      <th>Người gửi</th>
+                      <th>Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody id="admQueue"></tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </div>
       </div>

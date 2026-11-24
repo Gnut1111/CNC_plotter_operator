@@ -1,7 +1,8 @@
 /* ==========================================================================
-   Pixel2Plot — Dub.co Enterprise Design System (v4.1 — Balanced Prismatic)
+   Pixel2Plot — Dub.co Enterprise Design System (v5 — Full Workspace Refinement)
    95% Crisp Neutral Clarity · 5 Restrained Cyan / Violet / Pink Touches
-   Seamless Inset Canvas · Compact Dispatch Dock · 100% Playwright-Safe
+   Edge-to-Edge Flat Workspaces · Single-Row Figma Studio Bar · Zero Cardception
+   100% Playwright-Safe (1440 / 390 / 360 / 320px)
    ========================================================================== */
 
 :root {
@@ -235,7 +236,7 @@ code {
 .anim-stagger-5 { animation: fadeSlideUp 380ms var(--ease-out-expo) both; animation-delay: 220ms; }
 
 .tab:not(.hidden) {
-  animation: tabReveal 180ms var(--ease-out-expo);
+  animation: tabReveal 160ms var(--ease-out-expo);
 }
 
 /* ==========================================================================
@@ -279,7 +280,7 @@ button:focus-visible, .file-button:focus-visible {
 }
 
 button:disabled {
-  opacity: 0.48;
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none !important;
   box-shadow: none;
@@ -1220,8 +1221,10 @@ label.check input[type="checkbox"] {
     flex-direction: column;
   }
 
-  .tab-padded {
-    padding: 24px 28px 32px;
+  .tab-flat {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
   }
 }
 
@@ -1352,29 +1355,38 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Page Headers & Workspace Top Bar (Whisper-Light Ambient Wash)
+   Flat Page Headers & Workspace Top Bar (Unified Dub.co Rhythm)
    ========================================================================== */
-.page-header {
+.flat-page-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding-bottom: 18px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid #F0F0F0;
+  gap: 12px 16px;
+  padding: 20px 26px 16px;
+  border-bottom: 1px solid #EBEBEB;
+  background:
+    radial-gradient(320px 64px at 18% 0%, rgba(6, 182, 212, 0.028), transparent 75%),
+    radial-gradient(320px 64px at 54% 0%, rgba(139, 92, 246, 0.026), transparent 75%),
+    radial-gradient(320px 64px at 88% 0%, rgba(236, 72, 153, 0.024), transparent 75%),
+    #FFFFFF;
+}
+
+.flat-page-body {
+  padding: 20px 26px 28px;
 }
 
 .page-title {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.025em;
   color: #171717;
   line-height: 1.2;
 }
 
 .page-subtitle {
-  font-size: 13.5px;
+  font-size: 13px;
   color: #737373;
   margin-top: 3px;
 }
@@ -1391,7 +1403,7 @@ label.check input[type="checkbox"] {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 46px;
+  min-height: 44px;
   padding: 0 20px;
   border-bottom: 1px solid #EBEBEB;
   background:
@@ -1470,7 +1482,7 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Drawing Workspace — Roomy Split with Compact Sticky Dispatch Dock
+   TAB 1: Drawing Workspace — Full-Height Flex Viewport (ZERO Dead Bottom Space)
    ========================================================================== */
 .grid-draw {
   display: grid;
@@ -1501,7 +1513,18 @@ label.check input[type="checkbox"] {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
     border-right: 1px solid #EBEBEB !important;
+  }
+
+  .draw-viewport > * {
+    flex: 0 0 auto;
+  }
+
+  .draw-viewport > .preview-wrap {
+    height: clamp(290px, calc(100dvh - 335px), 680px);
+    border-radius: 0 !important;
   }
 
   .draw-sidebar {
@@ -1549,25 +1572,16 @@ label.check input[type="checkbox"] {
   overflow: hidden;
 }
 
-@media (min-width: 1024px) {
-  .draw-viewport { overflow-y: auto; scrollbar-gutter: stable; }
-  .draw-viewport > * { flex: 0 0 auto; }
-  .draw-viewport .preview-wrap {
-    height: clamp(280px, calc(100dvh - 335px), 680px);
-    border-radius: 0 !important;
-  }
-}
-
 .viewport-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 7px 16px;
   border-bottom: 1px solid #F0F0F0;
   background: #FFFFFF;
-  min-height: 46px;
+  min-height: 44px;
 }
 
 .source-picker {
@@ -1593,28 +1607,33 @@ label.check input[type="checkbox"] {
   gap: 10px;
 }
 
+#simulateBtn {
+  min-inline-size: 92px;
+}
+
 .segmented {
   display: inline-flex;
   background: #F4F4F5;
   border-radius: 8px;
-  padding: 3px;
+  padding: 2.5px;
   gap: 2px;
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .segmented button {
-  height: 26px;
-  padding: 0 10px;
+  height: 25px;
+  padding: 0 9px;
   font-size: 12px;
   background: transparent;
   color: #525252;
   border: none;
   box-shadow: none;
   border-radius: 5px;
+  gap: 5px;
 }
 
 .segmented button:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.045);
   color: #171717;
 }
 
@@ -1622,7 +1641,7 @@ label.check input[type="checkbox"] {
   background: #FFFFFF;
   color: #171717;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.07);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .travel-toggle {
@@ -1634,6 +1653,211 @@ label.check input[type="checkbox"] {
   background: #FEF2F2;
   border-bottom: 1px solid rgba(239, 68, 68, 0.2);
   font-weight: 500;
+}
+
+/* --- Unified Single-Row Figma Studio Sub-Toolbar (.drawing-editor) --- */
+.drawing-editor {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 5px 16px;
+  background: #FAFAFA;
+  border-bottom: 1px solid #EAEAEA;
+  min-height: 38px;
+}
+
+.drawing-editor[hidden],
+.drawing-editor-options[hidden],
+.drawing-editor-options [hidden] {
+  display: none !important;
+}
+
+.drawing-editor-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.editor-divider {
+  width: 1px;
+  height: 18px;
+  background: #E2E2E6;
+  margin: 0 2px;
+}
+
+.editor-history-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.editor-icon-btn {
+  height: 26px !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  color: #404040;
+  gap: 5px;
+}
+
+.editor-icon-btn:hover:not(:disabled) {
+  background: #EFEFF1;
+  color: #171717;
+}
+
+.tool-ico {
+  flex-shrink: 0;
+  opacity: 0.78;
+}
+
+.segmented button[aria-pressed="true"] .tool-ico {
+  opacity: 1;
+}
+
+/* Clean Dub/Linear History Popover (No Native Triangle) */
+.editor-history-menu {
+  position: relative;
+}
+
+.editor-history-menu > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #404040;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.editor-history-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor-history-menu > summary:hover,
+.editor-history-menu[open] > summary {
+  background: #EFEFF1;
+  color: #171717;
+}
+
+.editor-history-menu .history-caret {
+  color: #8F8F8F;
+  transition: transform 160ms var(--ease-out-expo);
+}
+
+.editor-history-menu[open] .history-caret {
+  transform: rotate(180deg);
+  color: #171717;
+}
+
+.drawing-versions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  width: 248px;
+  max-height: 250px;
+  overflow-y: auto;
+  z-index: 40;
+  padding: 5px;
+  border: 1px solid #E5E5E5;
+  border-radius: 10px;
+  background: #FFFFFF;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fadeSlideUp 150ms var(--ease-out-expo);
+}
+
+.drawing-versions button {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 450;
+  text-align: left;
+  white-space: normal;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  color: #404040;
+  border-radius: 6px;
+}
+
+.drawing-versions button:hover:not(:disabled) {
+  background: #F4F4F5;
+  color: #171717;
+  box-shadow: none;
+}
+
+.drawing-versions button[aria-current="true"] {
+  background: #F4F4F5;
+  color: #171717;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.zoom-segmented button {
+  min-width: 26px;
+  padding: 0 7px;
+}
+
+#drawingZoomReset {
+  min-width: 46px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* Contextual Tool Options Strip */
+.drawing-editor-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 6px 16px;
+  background: #FAFAFA;
+  border-top: 1px solid #EBEBEB;
+  min-height: 36px;
+}
+
+#drawingBrush,
+.drawing-crop-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.brush-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #404040;
+}
+
+#drawingBrush input {
+  width: 112px;
+  margin: 0;
+}
+
+.drawing-editor-options p {
+  margin: 0;
+  font-size: 12px;
+  color: #737373;
+}
+
+.drawing-editor-options p:empty {
+  display: none;
 }
 
 /* Touchpoint #3: Whisper-Soft Ambient Cyan/Violet/Pink Glow on Blueprint Stage */
@@ -1648,9 +1872,9 @@ label.check input[type="checkbox"] {
     radial-gradient(420px 300px at 90% 86%, rgba(236, 72, 153, 0.038), transparent 70%),
     radial-gradient(360px 240px at 54% 48%, rgba(139, 92, 246, 0.028), transparent 72%),
     #FAFAFA;
-  height: clamp(340px, calc(100dvh - 280px), 680px);
+  height: clamp(320px, calc(100dvh - 280px), 680px);
   min-height: 280px;
-  padding: 18px;
+  padding: 16px;
   outline: none;
   overflow: hidden;
   transition: background-color 160ms ease, box-shadow 160ms ease;
@@ -1694,7 +1918,13 @@ label.check input[type="checkbox"] {
   background: transparent;
   position: relative;
   z-index: 2;
+  outline: none;
 }
+
+#preview:not([data-edit-tool=""])[data-edit-tool] { touch-action: none; cursor: crosshair; }
+#preview[data-edit-tool="pan"] { cursor: grab; }
+#preview[data-edit-tool="pan"]:active { cursor: grabbing; }
+#dropZone.is-empty #preview { visibility: hidden; }
 
 .empty-state {
   position: absolute;
@@ -1710,7 +1940,6 @@ label.check input[type="checkbox"] {
   padding: 20px;
 }
 
-/* Faint Tinted Concentric Halo Rings */
 .empty-halo-rings {
   position: absolute;
   width: 128px;
@@ -1776,35 +2005,59 @@ label.check input[type="checkbox"] {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px 12px;
-  padding: 8px 16px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-hairline);
+  gap: 8px 10px;
+  padding: 7px 16px;
+  background: #FAFAFA;
+  border-top: 1px solid #EBEBEB;
   font-size: 12px;
 }
 
 .playback-controls[hidden] { display: none; }
-#playbackBtn { min-width: 80px; }
-#playbackSpeed { width: auto; padding: 3px 6px; font-size: inherit; }
-#playbackStatus { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-#playbackPercent { flex: 0 0 6ch; text-align: right; }
-#playbackPenState { min-width: 10ch; }
-
-.playback-controls p {
-  display: none;
+#playbackBtn { min-width: 78px; }
+#playbackSpeed {
+  width: 66px;
+  height: 28px;
+  padding: 0 22px 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border-radius: 6px;
 }
+#playbackStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+#playbackPercent {
+  min-width: 5.5ch;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: #171717;
+}
+#playbackPenState {
+  min-width: 10ch;
+  font-size: 11.5px;
+  color: #525252;
+  background: #FFFFFF;
+  border: 1px solid #E5E5E5;
+  border-radius: 9999px;
+  padding: 1px 8px;
+  text-align: center;
+}
+.playback-controls p { display: none; }
 
-/* Viewport Footer */
+/* Viewport Footer: Single-Row CAD Status Bar */
 .viewport-footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 4px 12px;
-  padding: 9px 16px;
+  gap: 4px 14px;
+  padding: 7px 16px;
   border-top: 1px solid #F0F0F0;
   background: #FFFFFF;
-  min-height: 38px;
+  min-height: 36px;
 }
 
 .status-row {
@@ -1814,7 +2067,7 @@ label.check input[type="checkbox"] {
 }
 
 .preview-status {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--ink-secondary);
 }
@@ -1843,7 +2096,7 @@ label.check input[type="checkbox"] {
   align-items: center;
   justify-content: space-between;
   gap: 10px 14px;
-  padding: 10px 16px;
+  padding: 9px 16px;
   background: #FAFAFA;
   border-top: 1px solid #E5E5E5;
 }
@@ -1911,7 +2164,7 @@ label.check input[type="checkbox"] {
 }
 
 /* ==========================================================================
-   Right Inspector Column (Neutral Parameters + Touchpoint #5 Auto-Tune CTA)
+   Right Inspector Column (Parameters + Touchpoint #5 Auto-Tune + Compact Dock)
    ========================================================================== */
 .pane-title {
   padding: 11px 16px;
@@ -1927,10 +2180,6 @@ label.check input[type="checkbox"] {
   font-size: 13.5px;
   font-weight: 700;
   color: #171717;
-}
-
-.pane-caption {
-  font-size: 12px;
 }
 
 .pane-body {
@@ -2149,7 +2398,6 @@ button.tune-link:disabled {
   box-shadow: 0 0 0 1px #171717, 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-/* Progressive Skeleton Loading Cards */
 .cand-loading {
   border-style: dashed !important;
   border-color: #D4D4D4 !important;
@@ -2239,7 +2487,7 @@ button.tune-link:disabled {
   width: 100%;
 }
 
-/* --- Advanced Accordion (Grouped 2-column compact layout) --- */
+/* --- Advanced Accordion --- */
 .advanced-details {
   border-top: 1px solid #F0F0F0;
   padding-top: 8px;
@@ -2505,13 +2753,64 @@ button.tune-link:disabled {
 }
 
 /* ==========================================================================
-   Tables (Jobs & Admin)
+   TAB 2: Edge-to-Edge Jobs Workspace (Zero Cardception + Filter Chips)
    ========================================================================== */
-.jobs-card,
-.admin-machines-card,
-.admin-users-card,
-.admin-queue-card {
-  overflow: hidden;
+.jobs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 26px;
+  border-bottom: 1px solid #F0F0F0;
+  background: #FFFFFF;
+}
+
+.filter-chip {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #525252;
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+  gap: 6px;
+}
+
+.filter-chip:hover:not(.active) {
+  background: #F4F4F5;
+  border-color: transparent;
+  color: #171717;
+  box-shadow: none;
+}
+
+.filter-chip.active {
+  background: #171717;
+  color: #FFFFFF;
+  border-color: #171717;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.chip-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 9999px;
+  background: #F0F0F2;
+  color: #525252;
+  line-height: 1.5;
+}
+
+.filter-chip.active .chip-count {
+  background: rgba(255, 255, 255, 0.18);
+  color: #FFFFFF;
+}
+
+.flat-table-surface {
+  flex: 1;
+  background: #FFFFFF;
 }
 
 .table-wrap {
@@ -2527,19 +2826,29 @@ button.tune-link:disabled {
 }
 
 .table th {
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 10px 16px;
+  font-size: 11.5px;
   font-weight: 500;
   color: #737373;
-  border-bottom: 1px solid #E5E5E5;
+  border-bottom: 1px solid #EBEBEB;
   text-align: left;
   background: #FAFAFA;
   white-space: nowrap;
 }
 
+.jobs-table th:first-child,
+.jobs-table td:first-child {
+  padding-left: 26px;
+}
+
+.jobs-table th:last-child,
+.jobs-table td:last-child {
+  padding-right: 26px;
+}
+
 .table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid #F0F0F0;
+  padding: 11px 16px;
+  border-bottom: 1px solid #F2F2F2;
   color: #171717;
   vertical-align: middle;
   transition: background-color 120ms ease;
@@ -2551,6 +2860,12 @@ button.tune-link:disabled {
 
 .table tbody tr:hover td {
   background: #FAFAFA;
+}
+
+.table-empty-cell {
+  text-align: center;
+  padding: 36px 16px !important;
+  color: #8F8F8F;
 }
 
 .job-name {
@@ -2579,11 +2894,25 @@ button.tune-link:disabled {
   color: #737373;
 }
 
+/* Single-line crisp Progress Bar + Percentage */
+.progress-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 112px;
+}
+
+.progress-inline .bar {
+  width: 68px;
+  min-width: 68px;
+  flex: 0 0 68px;
+}
+
 .progress-pct-label {
-  display: inline-block;
-  margin-top: 4px;
+  font-family: var(--font-mono);
   font-size: 11.5px;
-  color: #737373;
+  color: #525252;
+  min-width: 34px;
 }
 
 .job-actions,
@@ -2595,40 +2924,122 @@ button.tune-link:disabled {
 }
 
 .col-actions {
-  text-align: right;
+  text-align: right !important;
 }
 
 /* ==========================================================================
-   Machine Metric Cards
+   TAB 3: Hardware Machines View (Proportional Bed SVG + Direct Dispatch)
    ========================================================================== */
-.machine-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+.fleet-summary-pills {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.machine-card {
-  overflow: hidden;
+.fleet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: #FAFAFA;
+  border: 1px solid #E5E5E5;
+  font-size: 12px;
+  color: #525252;
+}
+
+.fleet-pill strong {
+  color: #171717;
+  font-weight: 600;
+}
+
+.fleet-pill-ok {
+  background: #ECFDF5;
+  border-color: rgba(16, 185, 129, 0.22);
+  color: #047857;
+}
+
+.fleet-pill-ok strong {
+  color: #047857;
+}
+
+.fleet-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+}
+
+.machine-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1080px;
+}
+
+.machine-row-card {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  background: #FFFFFF;
+  border: 1px solid #E5E5E5;
+  border-radius: 12px;
   transition: border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.machine-card:hover {
-  border-color: #D4D4D4;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+.machine-row-card:hover {
+  border-color: #CFCFD4;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
 }
 
-.machine-card-head {
+.machine-row-card.is-selected {
+  border-color: #171717;
+  box-shadow: 0 0 0 1px rgba(23, 23, 23, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.machine-bed-preview {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid #F0F0F0;
+  align-items: center;
+  justify-content: center;
+  width: 128px;
+  height: 82px;
+  border-radius: 9px;
+  background:
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.022) 0 1px, transparent 1px 7px),
+    #FAFAFA;
+  border: 1px solid #EBEBEB;
+  flex-shrink: 0;
 }
 
-.machine-card-head h2 {
+.machine-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.machine-row-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.machine-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.machine-identity h2 {
   font-size: 15px;
-  margin-bottom: 4px;
+  font-weight: 700;
+  color: #171717;
 }
 
 .machine-id-pill {
@@ -2636,66 +3047,232 @@ button.tune-link:disabled {
   color: #737373;
 }
 
-.machine-metrics-grid {
+.machine-specs-inline {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  background: #FAFAFA;
+  grid-template-columns: repeat(3, minmax(110px, 160px));
+  gap: 12px 20px;
 }
 
-.machine-metric {
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  border-right: 1px solid #F0F0F0;
-}
-
-.machine-metric:last-child {
-  border-right: none;
-}
-
-.metric-label {
+.machine-specs-inline dt {
   font-size: 11px;
-  color: #737373;
+  color: #8F8F8F;
+  margin-bottom: 2px;
 }
 
-.metric-value {
+.machine-specs-inline dd {
   font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 600;
   color: #171717;
 }
 
+.machine-row-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.empty-inline {
+  padding: 36px 20px;
+  text-align: center;
+  border: 1px dashed #E5E5E5;
+  border-radius: 10px;
+}
+
 /* ==========================================================================
-   Admin Dashboard
+   TAB 4: Enterprise Admin Workspace (Flat 2-Tier Split, Open Clean Forms)
    ========================================================================== */
-.grid-admin {
+.admin-workspace {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  flex: 1;
 }
 
-.inline-form {
+.admin-section {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 16px;
-  background: #FAFAFA;
-  border-top: 1px solid #EBEBEB;
-  align-items: center;
-}
-
-.inline-form input,
-.inline-form select {
-  height: 34px;
-  font-size: 12.5px;
-  flex: 1 1 130px;
+  flex-direction: column;
   background: #FFFFFF;
 }
 
-.inline-form button {
+.admin-machines-card {
+  border-bottom: 1px solid #E5E5E5;
+}
+
+.admin-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 26px 12px;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.section-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title-group h2 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #171717;
+}
+
+.section-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: #525252;
+  background: #F4F4F5;
+  border: 1px solid #E5E5E5;
+  padding: 0 7px;
+  border-radius: 9999px;
+  line-height: 1.6;
+}
+
+.admin-table th:first-child,
+.admin-table td:first-child {
+  padding-left: 26px;
+}
+
+.admin-table th:last-child,
+.admin-table td:last-child {
+  padding-right: 26px;
+}
+
+/* Open, Structured Admin Add Bars */
+.admin-add-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 26px;
+  background: #FAFAFA;
+  border-top: 1px solid #EFEFEF;
+}
+
+.add-bar-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #737373;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.admin-add-machine input[name="id"] {
+  flex: 1 1 150px;
+  max-width: 190px;
+}
+
+.admin-add-machine input[name="name"] {
+  flex: 1.5 1 180px;
+}
+
+.add-dim-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #FFFFFF;
+  border: 1px solid #E5E5E5;
+  border-radius: 8px;
+  padding: 0 8px;
   height: 34px;
-  flex: 0 0 auto;
+}
+
+.add-dim-pair:focus-within {
+  border-color: #171717;
+  box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.08);
+}
+
+.add-dim-pair input {
+  width: 52px;
+  height: 100%;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 2px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.dim-x, .dim-unit {
+  font-size: 11px;
+  color: #8F8F8F;
+  user-select: none;
+}
+
+.admin-add-machine button {
+  margin-left: auto;
+}
+
+/* Tier 2: Asymmetric 2-Column Split on Desktop */
+.admin-split-row {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  flex: 1;
+}
+
+.admin-users-card {
+  border-right: 1px solid #E5E5E5;
+}
+
+.admin-users-card .admin-section-header,
+.admin-users-card .admin-add-bar {
+  padding-right: 20px;
+}
+
+.admin-users-card .admin-table th:last-child,
+.admin-users-card .admin-table td:last-child {
+  padding-right: 20px;
+}
+
+.admin-queue-card .admin-section-header {
+  padding-left: 20px;
+}
+
+.admin-queue-card .admin-table th:first-child,
+.admin-queue-card .admin-table td:first-child {
+  padding-left: 20px;
+}
+
+.admin-add-user {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.add-user-fields {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(120px, 1.1fr) 88px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.add-user-fields input,
+.add-user-fields select,
+.add-user-fields button {
+  height: 32px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 1120px) {
+  .admin-split-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-users-card {
+    border-right: none;
+    border-bottom: 1px solid #E5E5E5;
+  }
+
+  .admin-queue-card .admin-section-header,
+  .admin-queue-card .admin-table th:first-child,
+  .admin-queue-card .admin-table td:first-child {
+    padding-left: 26px;
+  }
 }
 
 /* ==========================================================================
@@ -2953,6 +3530,79 @@ dialog::backdrop {
     flex-direction: column;
     gap: 12px;
   }
+
+  .flat-page-header {
+    padding: 14px 14px 12px;
+    border-radius: 10px 10px 0 0;
+    border: 1px solid #E5E5E5;
+    border-bottom: 1px solid #EBEBEB;
+  }
+
+  .flat-page-body {
+    padding: 12px 0 20px;
+  }
+
+  .jobs-toolbar {
+    padding: 8px 12px;
+    border-inline: 1px solid #E5E5E5;
+  }
+
+  .flat-table-surface {
+    border: 1px solid #E5E5E5;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+  }
+
+  .jobs-table th:first-child,
+  .jobs-table td:first-child,
+  .admin-table th:first-child,
+  .admin-table td:first-child {
+    padding-left: 12px;
+  }
+
+  .jobs-table th:last-child,
+  .jobs-table td:last-child,
+  .admin-table th:last-child,
+  .admin-table td:last-child {
+    padding-right: 12px;
+  }
+
+  .admin-workspace {
+    border: 1px solid #E5E5E5;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
+  }
+
+  .admin-section-header,
+  .admin-add-bar {
+    padding-inline: 12px;
+  }
+
+  .machine-row-card {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .machine-bed-preview {
+    width: 100%;
+    height: 76px;
+  }
+
+  .machine-specs-inline {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .machine-row-action {
+    justify-content: stretch;
+  }
+
+  .machine-row-action button {
+    width: 100%;
+  }
 }
 
 @media (max-width: 768px) {
@@ -3047,6 +3697,33 @@ dialog::backdrop {
     font-size: 11.5px;
   }
 
+  .drawing-editor {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .editor-divider {
+    display: none;
+  }
+
+  .drawing-editor-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .editor-tools-group .segmented {
+    width: auto;
+    flex: 1;
+  }
+
+  .zoom-segmented {
+    width: auto !important;
+  }
+
+  .drawing-editor-options {
+    padding: 6px 10px;
+  }
+
   .playback-controls {
     grid-template-columns: auto auto minmax(0, 1fr);
     gap: 8px;
@@ -3062,10 +3739,15 @@ dialog::backdrop {
     justify-content: flex-end;
   }
 
+  .add-user-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .job-meta-grid {
     grid-template-columns: 1fr;
   }
 
+  /* Mobile Jobs Table: Zero horizontal overflow (table.scrollWidth <= card.clientWidth) */
   .jobs-table :is(th, td):is(.col-mach, .col-user, .col-time, .col-progress) {
     display: none !important;
   }
@@ -3124,6 +3806,10 @@ dialog::backdrop {
     font-size: 11.5px;
     white-space: nowrap;
   }
+
+  .add-user-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Accessibility: Reduced Motion */
@@ -3134,51 +3820,3 @@ dialog::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
-
-.drawing-editor {
-  position: relative;
-  padding: 8px 14px;
-  border-block: 1px solid var(--border-hairline);
-}
-#simulateBtn { min-inline-size: 111px; }
-.drawing-editor-options {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  padding: 6px 14px;
-  border-top: 1px solid var(--border-hairline);
-}
-.drawing-editor[hidden], .drawing-editor-options[hidden], .drawing-editor-options [hidden] { display: none; }
-.drawing-editor-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.drawing-editor-row + .drawing-editor-row { margin-top: 6px; }
-.drawing-editor-row > .segmented { flex-wrap: wrap; max-width: 100%; }
-.drawing-editor-row summary { cursor: pointer; padding: 4px 6px; }
-.drawing-versions {
-  position: absolute;
-  top: 100%;
-  left: 14px;
-  width: min(250px, calc(100% - 28px));
-  max-height: 245px;
-  overflow-y: auto;
-  z-index: 5;
-  padding: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  background: var(--bg-surface);
-}
-.drawing-versions button { display: block; width: 100%; text-align: left; white-space: normal; }
-.drawing-editor-options p { margin: 0; font-size: .8rem; }
-.drawing-editor-options p:empty { display: none; }
-#drawingBrush, .drawing-crop-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-#drawingBrush[hidden] { display: none; }
-#drawingBrush input { width: 90px; margin: 0; }
-#preview:not([data-edit-tool=""])[data-edit-tool] { touch-action: none; cursor: crosshair; }
-#preview[data-edit-tool="pan"] { cursor: grab; }
-#preview[data-edit-tool="pan"]:active { cursor: grabbing; }
-#dropZone.is-empty #preview { visibility: hidden; }
