@@ -1527,6 +1527,16 @@ label.check input[type="checkbox"] {
     border-radius: 0 !important;
   }
 
+  .draw-viewport:has(> .preview-wrap.is-empty) {
+    scrollbar-gutter: auto;
+  }
+
+  .draw-viewport > .preview-wrap.is-empty {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+
   .draw-sidebar {
     height: 100%;
     display: flex;
@@ -1882,6 +1892,10 @@ label.check input[type="checkbox"] {
 
 .preview-wrap.is-empty {
   cursor: pointer;
+}
+
+.preview-wrap.is-empty ~ .viewport-footer {
+  display: none;
 }
 
 .preview-wrap.is-empty:hover .empty-glyph {
