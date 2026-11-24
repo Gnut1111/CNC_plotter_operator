@@ -1535,6 +1535,7 @@ label.check input[type="checkbox"] {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
+    padding: 18px;
   }
 
   .draw-sidebar {
@@ -1895,7 +1896,7 @@ label.check input[type="checkbox"] {
 }
 
 .preview-wrap.is-empty ~ .viewport-footer {
-  display: none;
+  min-height: 38px;
 }
 
 .preview-wrap.is-empty:hover .empty-glyph {
@@ -1938,8 +1939,6 @@ label.check input[type="checkbox"] {
 #preview:not([data-edit-tool=""])[data-edit-tool] { touch-action: none; cursor: crosshair; }
 #preview[data-edit-tool="pan"] { cursor: grab; }
 #preview[data-edit-tool="pan"]:active { cursor: grabbing; }
-#dropZone.is-empty #preview { visibility: hidden; }
-
 .empty-state {
   position: absolute;
   inset: 0;
