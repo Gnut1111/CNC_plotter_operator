@@ -43,20 +43,24 @@
             <span class="wordmark-text">pixel2plot</span>
           </div>
 
-          <form id="loginForm" class="login-form-clean">
+          <form id="loginForm" method="post" class="login-form-clean">
             <div class="login-heading anim-stagger-2">
-              <h1>Đăng nhập vào Pixel2Plot</h1>
+              <h1 id="authHeading">Đăng nhập vào Pixel2Plot</h1>
               <p class="muted">Không gian làm việc và điều khiển máy vẽ trực tuyến</p>
             </div>
 
             <div class="login-fields anim-stagger-3">
               <label>
                 <span>Tên đăng nhập</span>
-                <input name="username" autocomplete="username" placeholder="Nhập tên đăng nhập" required />
+                <input name="username" maxlength="32" autocomplete="username" placeholder="Nhập tên đăng nhập" required />
               </label>
               <label>
                 <span>Mật khẩu</span>
                 <input name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required />
+              </label>
+              <label id="confirmPasswordField" class="hidden">
+                <span>Nhập lại mật khẩu</span>
+                <input name="confirmation" type="password" autocomplete="new-password" placeholder="Nhập lại mật khẩu" disabled />
               </label>
             </div>
 
@@ -64,7 +68,19 @@
             <p id="loginError" class="error login-error-msg" role="alert"></p>
           </form>
 
-          <p class="login-support anim-stagger-5">Chưa có tài khoản? Liên hệ quản trị viên để được cấp quyền.</p>
+          <div class="google-auth anim-stagger-5">
+            <div class="login-divider"><span>hoặc</span></div>
+            <button type="button" id="googleAuthBtn" class="google-auth-button" aria-describedby="googleAuthNote" disabled>
+              <img src="google-g.png" alt="" width="18" height="18" />
+              <span>Tiếp tục với Google</span>
+            </button>
+            <p id="googleAuthNote" class="muted" role="status" hidden></p>
+          </div>
+
+          <p class="login-support anim-stagger-5">
+            <span id="authModeHint">Chưa có tài khoản?</span>
+            <button type="button" id="authModeBtn" class="auth-mode-button">Đăng ký</button>
+          </p>
           <p class="login-legal anim-stagger-5">© 2026 Pixel2Plot</p>
         </div>
       </div>
@@ -484,25 +500,6 @@
                   </div>
                   <p id="sizeHint" class="muted option-hint">Tối đa 120 × 80 mm. Ảnh giữ nguyên tỷ lệ khi vẽ.</p>
 
-                  <div class="control-group">
-                    <label class="slider-label">
-                      <span>Mức chi tiết</span>
-                      <output id="detailVal" class="val-pill tabular-nums">5</output>
-                    </label>
-                    <input type="range" name="detail" min="1" max="10" value="5" />
-                    <div class="range-labels muted"><span>Nhanh</span><span>Chi tiết</span></div>
-                  </div>
-
-                  <div class="control-group">
-                    <label>Kiểu nét
-                      <select name="mode">
-                        <option value="centerline">Đường tâm</option>
-                        <option value="outline">Đường viền</option>
-                        <option value="fill">Viền và tô gạch</option>
-                      </select>
-                    </label>
-                  </div>
-
                   <!-- Single Prominent Auto-Tune CTA + Progressive Live Cards -->
                   <div class="auto-tune-box">
                     <button type="button" id="autoBtn" class="auto-cta-btn" disabled>
@@ -520,6 +517,16 @@
                     <div id="autoResult" class="auto-result" aria-live="polite"></div>
                   </div>
 
+                  <div class="control-group">
+                    <label>Kiểu nét
+                      <select name="mode">
+                        <option value="centerline">Đường tâm</option>
+                        <option value="outline">Đường viền</option>
+                        <option value="fill">Viền và tô gạch</option>
+                      </select>
+                    </label>
+                  </div>
+
                   <!-- Advanced Accordion (Grouped 2-column compact layout) -->
                   <details id="advancedOptions" class="advanced-details">
                     <summary>
@@ -529,6 +536,16 @@
                     <div class="advanced-inner">
                       <div class="adv-section">
                         <div class="adv-section-label">Xử lý ảnh &amp; tách nét</div>
+                        <div class="control-group">
+                          <label class="slider-label" for="detailLevel">
+                            <span>Mức chi tiết đường vẽ</span>
+                            <output id="detailVal" for="detailLevel" class="val-pill tabular-nums">10</output>
+                          </label>
+                          <input type="range" id="detailLevel" name="detail" min="1" max="10" value="10" aria-describedby="detailHint" />
+                          <div class="range-labels muted"><span>Giản lược nét</span><span>Giữ nhiều chi tiết</span></div>
+                          <p id="detailHint" class="muted option-hint">Giảm mức để giản lược nét và thường rút ngắn thời gian vẽ.</p>
+                          <p id="detailOverrideHint" class="muted option-hint" hidden>Đang dùng phân giải và giản lược nâng cao. Kéo thanh để tự tính lại.</p>
+                        </div>
                         <div class="form-row">
                           <label>Tách nét
                             <select name="thresholdMode">
@@ -796,11 +813,11 @@
                   <tbody id="admUsers"></tbody>
                 </table>
               </div>
-              <form id="addUserForm" class="admin-add-bar admin-add-user" autocomplete="off">
+              <form id="addUserForm" method="post" class="admin-add-bar admin-add-user" autocomplete="off">
                 <span class="add-bar-label">Tạo tài khoản mới</span>
                 <div class="add-user-fields">
                   <input name="username" placeholder="Tên đăng nhập" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" required />
-                  <input name="password" type="password" placeholder="Mật khẩu ≥ 6 ký tự" autocomplete="new-password" required />
+                  <input name="password" type="password" placeholder="Mật khẩu từ 12 ký tự" autocomplete="new-password" minlength="12" required />
                   <select name="role" aria-label="Vai trò">
                     <option value="user">user</option>
                     <option value="admin">admin</option>
@@ -850,6 +867,33 @@
       </form>
     </div>
     <div id="jobDetailsBody" class="dialog-body" role="status"></div>
+  </dialog>
+
+  <dialog id="machineToken" aria-labelledby="machineTokenTitle">
+    <div class="dialog-header">
+      <h2 id="machineTokenTitle">Token MQTT</h2>
+      <form method="dialog"><button type="submit" class="small ghost">Đóng</button></form>
+    </div>
+    <div class="security-dialog-body">
+      <label>Token của thiết bị
+        <input type="text" id="machineTokenValue" readonly autocomplete="off" spellcheck="false" />
+      </label>
+    </div>
+  </dialog>
+
+  <dialog id="resetPassword" aria-labelledby="resetPasswordTitle">
+    <div class="dialog-header">
+      <h2 id="resetPasswordTitle">Đặt lại mật khẩu</h2>
+      <form method="dialog"><button type="submit" class="small ghost">Đóng</button></form>
+    </div>
+    <form id="resetPasswordForm" method="post" class="security-dialog-body">
+      <label>Mật khẩu mới
+        <input name="password" type="password" minlength="12" autocomplete="new-password" required />
+      </label>
+      <p class="muted">Tài khoản sẽ được đăng xuất khỏi tất cả thiết bị.</p>
+      <p id="resetPasswordError" class="error" role="alert"></p>
+      <button type="submit" class="primary">Đặt lại mật khẩu</button>
+    </form>
   </dialog>
 
   <!-- Notification Toast UI -->

@@ -21,6 +21,25 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS google_accounts (
+  subject  TEXT PRIMARY KEY,
+  user_id  INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL,
+  last_seen  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+CREATE TRIGGER IF NOT EXISTS revoke_sessions_on_account_change
+AFTER UPDATE OF password_hash, role, locked ON users
+WHEN OLD.password_hash <> NEW.password_hash OR OLD.role <> NEW.role OR OLD.locked <> NEW.locked
+BEGIN
+  DELETE FROM sessions WHERE user_id = NEW.id;
+END;
+
 CREATE TABLE IF NOT EXISTS machines (
   id          TEXT PRIMARY KEY,           -- vd: cnc-01 (dùng trong topic MQTT)
   name        TEXT NOT NULL,
@@ -78,20 +97,51 @@ for (const [table, column, type] of [
 }
 db.exec("CREATE UNIQUE INDEX IF NOT EXISTS jobs_user_request ON jobs(user_id, request_key)");
 
-// Dữ liệu mẫu cho lần chạy đầu tiên
-function seed() {
-  const count = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
-  if (count > 0) return;
-  const insertUser = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)");
-  insertUser.run("admin", bcrypt.hashSync("admin123", 10), "admin");
-  insertUser.run("user", bcrypt.hashSync("user123", 10), "user");
-
-  const insertMachine = db.prepare("INSERT INTO machines (id, name, token, work_width, work_height) VALUES (?, ?, ?, ?, ?)");
-  insertMachine.run("cnc-01", "Máy vẽ thật #1", "cnc-01-token", config.workArea.width, config.workArea.height);
-  insertMachine.run("sim-01", "Máy giả lập #1", "sim-01-token", config.workArea.width, config.workArea.height);
-  console.log("[db] seeded: admin/admin123, user/user123, machines cnc-01, sim-01");
+function validPassword(password, min = 12) {
+  return typeof password === "string" && password.length >= min && Buffer.byteLength(password) <= 72;
 }
-seed();
+
+function provision() {
+  const password = process.env.ADMIN_PASSWORD;
+  const insertUser = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)");
+  if (!db.prepare("SELECT 1 FROM users LIMIT 1").get()) {
+    if (!config.demoMode && !validPassword(password)) {
+      throw new Error("Đặt ADMIN_PASSWORD (tối thiểu 12 ký tự, tối đa 72 byte) khi thiết lập máy chủ.");
+    }
+    db.exec("BEGIN");
+    try {
+      insertUser.run("admin", bcrypt.hashSync(config.demoMode ? "admin123" : password, 10), "admin");
+      if (config.demoMode) insertUser.run("user", bcrypt.hashSync("user123", 10), "user");
+      const insertMachine = db.prepare("INSERT INTO machines (id, name, token, work_width, work_height) VALUES (?, ?, ?, ?, ?)");
+      insertMachine.run("cnc-01", "Máy vẽ thật #1", config.demoMode ? "cnc-01-token" : newToken(), config.workArea.width, config.workArea.height);
+      insertMachine.run("sim-01", "Máy giả lập #1", config.demoMode ? "sim-01-token" : newToken(), config.workArea.width, config.workArea.height);
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+  if (config.demoMode) return;
+
+  if (process.env.PRESERVE_DEMO_PASSWORDS !== "true") {
+    const account = db.prepare("SELECT id, password_hash FROM users WHERE username = ?");
+    const admin = account.get("admin");
+    const user = account.get("user");
+    const defaultAdmin = admin && bcrypt.compareSync("admin123", admin.password_hash);
+    if (defaultAdmin && !validPassword(password)) {
+      throw new Error("CSDL còn mật khẩu admin mặc định. Đặt ADMIN_PASSWORD mới trước khi khởi động.");
+    }
+    if (defaultAdmin) {
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(bcrypt.hashSync(password, 10), admin.id);
+    }
+    if (user && bcrypt.compareSync("user123", user.password_hash)) {
+      db.prepare("UPDATE users SET locked = 1, password_hash = ? WHERE id = ?").run(bcrypt.hashSync(newToken(), 10), user.id);
+    }
+  }
+  const rotate = db.prepare("UPDATE machines SET token = ? WHERE id = ? AND token = ?");
+  for (const id of ["cnc-01", "sim-01"]) rotate.run(newToken(), id, `${id}-token`);
+}
+provision();
 db.prepare(`UPDATE machines SET work_width = max(1, min(work_width, ?)), work_height = max(1, min(work_height, ?))
   WHERE work_width NOT BETWEEN 1 AND ? OR work_height NOT BETWEEN 1 AND ?`)
   .run(config.workArea.width, config.workArea.height, config.workArea.width, config.workArea.height);
@@ -100,4 +150,4 @@ function newToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 
-module.exports = { db, newToken };
+module.exports = { db, newToken, validPassword };

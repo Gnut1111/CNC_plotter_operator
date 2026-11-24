@@ -1,12 +1,20 @@
 # REST API & WebSocket
 
-Mọi API (trừ đăng nhập) cần header `Authorization: Bearer <JWT>`.
+Đăng nhập cấp cookie phiên `HttpOnly`, `SameSite=Strict` và `Secure` khi dùng HTTPS. Các API ngoài nhóm xác thực cần cookie và header `X-Session-Context` lấy từ phản hồi đăng nhập hoặc `/api/auth/me`. Trong nhóm xác thực, `/api/auth/me` chỉ cần cookie, còn `/api/auth/logout` cần cả cookie và header. Giá trị context liên kết yêu cầu với đúng phiên của tab, cookie dùng để xác thực.
 
 ## Xác thực
 | Method | Path | Mô tả |
 |---|---|---|
-| POST | `/api/auth/login` | `{username, password}` → `{token, user}`. Sai → 401 |
-| GET | `/api/auth/me` | Thông tin người dùng hiện tại |
+| GET | `/api/auth/options` | `{google}` cho biết Google có khả dụng trên origin hiện tại |
+| POST | `/api/auth/register` | `{username, password}` → đăng ký vai trò user và cấp phiên, trả 201. Tên đã dùng → 409 |
+| POST | `/api/auth/login` | `{username, password}` → `{context, user}`. Sai → 401, bị khóa → 403, đang đăng nhập ở thiết bị khác → 409, vượt giới hạn → 429 |
+| GET | `/api/auth/me` | `{context, user}` của phiên hiện tại |
+| POST | `/api/auth/logout` | Thu hồi phiên trên máy chủ và xóa cookie, trả 204 |
+| POST | `/api/auth/google/start` | Tạo lượt xác thực Google, trả `{url}` để trình duyệt chuyển trang |
+| GET | `/api/auth/google/callback` | Xác thực state, rồi chuyển về web |
+| POST | `/api/auth/google/finish` | Đổi mã OAuth một lần, xác thực ID token và cấp phiên, trả `{context, user}` |
+
+Đăng ký và các bước OAuth dùng cookie tương ứng của luồng. Google dùng Authorization Code với PKCE và nonce. Định danh Google được lưu riêng với tài khoản, không tự liên kết với tài khoản cũ theo tên đăng nhập.
 
 ## Bản vẽ (Image Uploader / Converter / G-code Viewer)
 | Method | Path | Mô tả |
@@ -19,7 +27,7 @@ Mọi API (trừ đăng nhập) cần header `Authorization: Bearer <JWT>`.
 | GET | `/api/drawings/:id/image` | Ảnh gốc |
 | GET | `/api/converter/defaults` | Tham số mặc định |
 
-`params`: `widthMm, heightMm, detail (1–10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), simplifyMm (mm, null để suy ra từ detail), hatchRatio (0,6–1 lần bề rộng bút), fillStrategy ("legacy" | "inset-x" | "inset-y"), rasterPx (210–1280 px, null để suy ra từ detail), despeckle (bool), penWidthMm`. Có thể thêm `drawFeed` 60–900, `controlledTravelFeed` 60–2400 hoặc bỏ trống để dùng rapid, `penLiftZ` 0,1–5 và `penLowerFeed` 60–300. Server giới hạn các giá trị và tự sinh lệnh bút tương ứng.
+`params`: `widthMm, heightMm, detail (1–10, mặc định 10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), simplifyMm (mm, null để suy ra từ detail), hatchRatio (0,6–1 lần bề rộng bút), fillStrategy ("legacy" | "inset-x" | "inset-y"), rasterPx (210–1280 px, null để suy ra từ detail), despeckle (bool), penWidthMm`. Có thể thêm `drawFeed` 60–900, `controlledTravelFeed` 60–2400 hoặc bỏ trống để dùng rapid, `penLiftZ` 0,1–5 và `penLowerFeed` 60–300. Server giới hạn các giá trị và tự sinh lệnh bút tương ứng.
 
 `stats` / `metrics` gồm `iou` (% diện tích giao/hợp), `inkRecall` (% mực gốc phủ đúng), `inkPrecision` (% mực đầu ra nằm đúng vị trí), `coverage` / `precision` có dung sai, `score` (80% IoU + 20% F1 theo dung sai), `chamferMm`, `extraMm`, `missMm`, `minutes`, `paths`, `drawLengthMm`, `travelMm`. Vòng kiểm tra cuối phát lại G-code và chấm trên ảnh tham chiếu cạnh dài 960 px.
 
@@ -42,14 +50,19 @@ Trạng thái phiên: `QUEUED → SENDING → READY → DRAWING ⇄ PAUSED → C
 | Method | Path | Mô tả |
 |---|---|---|
 | GET/POST | `/api/admin/machines` | Xem / thêm máy (sinh token MQTT) |
-| PATCH | `/api/admin/machines/:id` | Đổi tên, bật/tắt, vùng vẽ |
-| POST | `/api/admin/machines/:id/token` | Cấp lại token |
-| POST | `/api/admin/machines/:id/home` | Gửi lệnh về gốc |
+| PATCH | `/api/admin/machines/:id` | Đổi tên, bật/tắt, vùng vẽ. Tắt quyền kết nối khi máy đang xử lý phiên → 409 |
+| GET | `/api/admin/machines/:id/token` | Xem token của một máy |
+| POST | `/api/admin/machines/:id/token` | Cấp lại token, ngắt kết nối đã xác thực bằng token cũ. Máy đang xử lý phiên → 409 |
+| POST | `/api/admin/machines/:id/home` | Gửi lệnh về gốc. Máy phải trực tuyến và ở trạng thái rảnh hoặc lỗi, không có phiên đang xử lý. Nếu máy chưa sẵn sàng, trả 409. |
 | GET/POST | `/api/admin/users` | Xem / tạo tài khoản |
-| PATCH | `/api/admin/users/:id` | Khóa/mở khóa, đổi vai trò |
+| PATCH | `/api/admin/users/:id` | Khóa/mở khóa hoặc đổi vai trò và thu hồi phiên khi có thay đổi |
+| POST | `/api/admin/users/:id/revoke-sessions` | Thu hồi phiên của tài khoản |
+| POST | `/api/admin/users/:id/password` | `{password}` → đổi mật khẩu và thu hồi phiên |
 | GET | `/api/admin/queue` | Toàn bộ hàng đợi đang chạy |
 
-## WebSocket `ws://<host>/ws?token=<JWT>`
+## WebSocket `/ws?context=<context>`
+
+Kết nối dùng cookie của cùng host và kiểm tra Origin. Khi phiên bị thu hồi hoặc hết hạn, server ngắt kết nối với mã `4001`.
 Server đẩy `{type, data, ts}`:
 - `machine.status` — máy đổi trạng thái / online / offline (`reason`: `LWT`, `HEARTBEAT_TIMEOUT`)
 - `job.status` — phiên đổi trạng thái/tiến độ (chỉ gửi cho chủ phiên + admin)

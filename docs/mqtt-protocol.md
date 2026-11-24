@@ -15,7 +15,7 @@
 | LWT (Last Will) | topic `cnc/<id>/status`, payload `{"state":"OFFLINE","event":"LWT"}`, QoS 1 |
 | QoS | 1 cho mọi bản tin |
 
-Máy chỉ được **publish** `cnc/<id>/status` và chỉ được **subscribe** `cnc/<id>/cmd`, `cnc/<id>/file` (broker chặn các topic khác).
+Máy chỉ được **publish** `cnc/<id>/status` và chỉ được **subscribe** `cnc/<id>/cmd`, `cnc/<id>/file` (broker chặn các topic khác). Bản tin trạng thái và LWT có giới hạn 4 KiB, cờ retain tắt.
 
 ## 2. Topic
 

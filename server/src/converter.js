@@ -10,7 +10,7 @@ const { profile: MACHINE, limitArea } = require("./machine-profile");
 const DEFAULTS = {
   widthMm: MACHINE.workArea.width, // kích thước bản vẽ mong muốn (giữ tỉ lệ ảnh)
   heightMm: MACHINE.workArea.height,
-  detail: 5, // 1..10 — cao hơn = độ phân giải xử lý cao hơn, ít đơn giản hóa hơn
+  detail: 10, // 1..10 — cao hơn = độ phân giải xử lý cao hơn, ít đơn giản hóa hơn
   threshold: "auto", // "auto" | "adaptive" | số 1..254
   invert: "auto", // "auto" | true | false
   mode: "centerline", // "centerline" (đường tâm) | "outline" (đường viền) | "fill" (viền + tô gạch)
@@ -72,7 +72,7 @@ function normalizeParams(input = {}, workArea) {
 const maxSizeFor = (p) => p.rasterPx ?? 150 + p.detail * 60;
 
 async function loadGray(buffer, maxSize, enlarge = false) {
-  const { data, info } = await sharp(buffer)
+  const { data, info } = await sharp(buffer, { limitInputPixels: 25_000_000 })
     .rotate()
     .flatten({ background: "#ffffff" })
     .resize(maxSize, maxSize, { fit: "inside", withoutEnlargement: !enlarge })
