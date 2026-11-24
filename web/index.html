@@ -370,8 +370,17 @@
 
             <div id="playbackControls" class="playback-controls" hidden>
               <button type="button" id="playbackBtn" class="small">Phát</button>
-              <input id="playbackPosition" type="range" min="0" max="1000" value="0" aria-label="Vị trí mô phỏng theo quãng đường" />
-              <span id="playbackStatus" class="tabular-nums"></span>
+              <select id="playbackSpeed" aria-label="Tốc độ mô phỏng">
+                <option value="0.5">0,5×</option>
+                <option value="1" selected>1×</option>
+                <option value="1.5">1,5×</option>
+                <option value="2">2×</option>
+              </select>
+              <input id="playbackPosition" type="range" min="0" max="10000" value="0" aria-label="Vị trí mô phỏng theo quãng đường" />
+              <span id="playbackStatus" class="tabular-nums">
+                <span id="playbackPercent">0,0%</span>
+                <span id="playbackPenState">Bút nhấc</span>
+              </span>
               <p>Phát nhanh đường bút trên web. Máy vẽ không di chuyển.</p>
             </div>
 

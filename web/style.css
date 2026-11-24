@@ -1771,14 +1771,21 @@ label.check input[type="checkbox"] {
 /* Playback Scrubber */
 .playback-controls {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px 12px;
   padding: 8px 16px;
-  background: #FFFFFF;
-  border-top: 1px solid #F0F0F0;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-hairline);
   font-size: 12px;
 }
+
+.playback-controls[hidden] { display: none; }
+#playbackBtn { min-width: 80px; }
+#playbackSpeed { width: auto; padding: 3px 6px; font-size: inherit; }
+#playbackStatus { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+#playbackPercent { flex: 0 0 6ch; text-align: right; }
+#playbackPenState { min-width: 10ch; }
 
 .playback-controls p {
   display: none;
@@ -3038,7 +3045,7 @@ dialog::backdrop {
   }
 
   .playback-controls {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto auto minmax(0, 1fr);
     gap: 8px;
     padding: 8px 10px;
   }
@@ -3049,7 +3056,7 @@ dialog::backdrop {
   }
 
   #playbackStatus {
-    text-align: right;
+    justify-content: flex-end;
   }
 
   .job-meta-grid {

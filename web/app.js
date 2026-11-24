@@ -323,8 +323,14 @@ $("#discardDraft").onclick = async () => {
   }
 };
 
-const playback = { open: false, progress: 0, frame: null };
+const playback = { open: false, progress: 0, frame: null, speed: 1, lastTime: 0 };
 const PLAYBACK_MS = 12000;
+const playbackScrubber = $("#playbackPosition");
+const playbackPercent = $("#playbackPercent");
+const playbackPenState = $("#playbackPenState");
+const formatPlaybackPercent = new Intl.NumberFormat("vi-VN", {
+  minimumFractionDigits: 1, maximumFractionDigits: 1,
+});
 const drawingEditor = mountDrawingEditor({
   root: $("#drawingEditor"),
   canvas,
@@ -408,15 +414,21 @@ function closePlayback() {
 
 function playPlayback() {
   if (playback.progress === 1) playback.progress = 0;
-  const start = performance.now() - playback.progress * PLAYBACK_MS;
+  playback.lastTime = performance.now();
   const advance = (now) => {
-    playback.progress = Math.min(1, Math.max(0, (now - start) / PLAYBACK_MS));
-    drawPreview();
+    updatePlayback(now);
     if (playback.progress === 1) pausePlayback();
     else playback.frame = requestAnimationFrame(advance);
   };
   $("#playbackBtn").textContent = "Tạm dừng";
   playback.frame = requestAnimationFrame(advance);
+}
+
+function updatePlayback(now) {
+  const elapsed = Math.max(0, now - playback.lastTime);
+  playback.lastTime += elapsed;
+  playback.progress = Math.min(1, playback.progress + elapsed * playback.speed / PLAYBACK_MS);
+  drawPreview();
 }
 
 function drawPreview() {
@@ -430,11 +442,13 @@ function drawPreview() {
   paintPreview(canvas, { area, size, image: original, preview: displayed, view, head, showTravel,
     camera: drawingEditor.camera, overlay: view === "paths" && !playback.open ? drawingEditor.overlay : null });
   if (head) {
-    const percent = Math.floor(playback.progress * 100);
+    const percent = Math.floor(playback.progress * 1000) / 10;
     const state = playback.progress === 1 ? "Đã về gốc" : head.ink ? "Bút đang vẽ" : "Bút nhấc";
-    $("#playbackPosition").value = Math.round(playback.progress * 1000);
-    const status = `${percent}% · ${state}`;
-    if ($("#playbackStatus").textContent !== status) $("#playbackStatus").textContent = status;
+    playbackScrubber.value = Math.round(playback.progress * Number(playbackScrubber.max));
+    updateSliderTrack(playbackScrubber);
+    const label = `${formatPlaybackPercent.format(percent)}%`;
+    if (playbackPercent.textContent !== label) playbackPercent.textContent = label;
+    if (playbackPenState.textContent !== state) playbackPenState.textContent = state;
     return;
   }
   const hasFile = Boolean(file);
@@ -876,10 +890,17 @@ $("#playbackBtn").onclick = () => {
   if (playback.frame === null) playPlayback();
   else pausePlayback();
 };
-$("#playbackPosition").oninput = (event) => {
-  playback.progress = Number(event.target.value) / 1000;
+playbackScrubber.oninput = () => {
+  playback.progress = playbackScrubber.valueAsNumber / Number(playbackScrubber.max);
   pausePlayback();
   drawPreview();
+};
+$("#playbackSpeed").onchange = (event) => {
+  if (playback.frame !== null) {
+    updatePlayback(performance.now());
+    if (playback.progress === 1) pausePlayback();
+  }
+  playback.speed = Number(event.target.value);
 };
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) pausePlayback();
