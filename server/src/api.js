@@ -8,6 +8,7 @@ const bcrypt = require("bcryptjs");
 const config = require("./config");
 const { db, newToken, validPassword } = require("./db");
 const { requireAuth, requireRole } = require("./auth");
+const { addPasswordUser } = require("./accounts");
 const { getSession, revokeUserSessions } = require("./sessions");
 const { disconnectMachine } = require("./mqttBroker");
 const { convert, DEFAULTS } = require("./converter");
@@ -297,16 +298,9 @@ admin.get("/users", (req, res) => res.json({ users: db.prepare("SELECT id, usern
 
 admin.post("/users", (req, res) => {
   const { username, password, role } = req.body || {};
-  if (typeof username !== "string" || !/^[a-zA-Z0-9_.]{3,32}$/.test(username) || !validPassword(password)) {
-    return res.status(400).json({ error: "Tên đăng nhập 3–32 ký tự, mật khẩu ít nhất 12 ký tự và tối đa 72 byte." });
-  }
-  try {
-    const r = db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)")
-      .run(username, bcrypt.hashSync(password, 10), role === "admin" ? "admin" : "user");
-    res.status(201).json({ id: Number(r.lastInsertRowid) });
-  } catch {
-    res.status(409).json({ error: "Tên đăng nhập đã tồn tại" });
-  }
+  const user = addPasswordUser(username, password, role === "admin" ? "admin" : "user");
+  if (user.error) return res.status(user.status).json({ error: user.error });
+  res.status(201).json({ id: user.id });
 });
 
 admin.patch("/users/:id", (req, res) => {

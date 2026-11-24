@@ -58,6 +58,20 @@ Phím tắt trong máy giả lập: `e` E-Stop · `l` chạm Limit · `o` rút W
 | `DATA_DIR` | `server/data`, chứa SQLite, ảnh và G-code |
 | `EMBEDDED_BROKER`, `MQTT_URL`, `SERVER_MQTT_PASS` | Broker nhúng bật. Khi dùng broker ngoài, cấu hình URL và mật khẩu kết nối nội bộ. |
 
+### Đăng ký tài khoản
+
+Người dùng chọn **Đăng ký** để tạo tài khoản bằng tên đăng nhập và mật khẩu. Tài khoản tự đăng ký có vai trò `user` và có thể gửi bản vẽ. Phiên đang hoạt động trên thiết bị khác được giữ nguyên nếu có lần đăng nhập trùng.
+
+Để bật **Tiếp tục với Google**, tạo OAuth client loại **Web application** trong [Google Cloud Console](https://console.cloud.google.com/auth/clients). Đăng ký chính xác URL callback, ví dụ `http://127.0.0.1:3003/api/auth/google/callback` khi thử cục bộ. Khi triển khai, dùng cùng đường dẫn trên tên miền HTTPS của web. Đặt ba biến môi trường sau trong dịch vụ máy chủ rồi khởi động lại.
+
+| Biến | Giá trị |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Client ID của OAuth client |
+| `GOOGLE_CLIENT_SECRET` | Client secret, chỉ lưu ở máy chủ |
+| `GOOGLE_REDIRECT_URI` | URL callback đã khai báo trong Google Cloud |
+
+Nút Google chỉ hoạt động ở địa chỉ tương ứng với callback. Nếu ứng dụng Google ở chế độ Testing, thêm tài khoản cần thử vào danh sách test users. Lần đầu dùng Google, server tạo một tài khoản `user` riêng. Server nhận ra người dùng quay lại bằng định danh Google, kể cả khi địa chỉ email hiển thị của họ thay đổi.
+
 ## So sánh chất lượng chuyển đổi (cho báo cáo)
 
 ```bash

@@ -156,22 +156,83 @@ function toast(text, kind = "", key = null) {
 const sessionChannel = new BroadcastChannel("pixel2plot-session");
 sessionChannel.onmessage = () => location.reload();
 
-$("#loginForm").addEventListener("submit", async (e) => {
+const loginForm = $("#loginForm");
+const loginError = $("#loginError");
+const authSubmit = loginForm.querySelector("button[type=submit]");
+const authModeButton = $("#authModeBtn");
+const googleButton = $("#googleAuthBtn");
+let registration = false;
+let authBusy = true;
+let googleAvailable = false;
+
+function updateAuthControls(busy) {
+  authBusy = busy;
+  authSubmit.disabled = busy;
+  authModeButton.disabled = busy;
+  googleButton.disabled = busy || !googleAvailable;
+}
+
+function setAuthMode(signUp, focus = false) {
+  registration = signUp;
+  $("#authHeading").textContent = signUp ? "Tạo tài khoản Pixel2Plot" : "Đăng nhập vào Pixel2Plot";
+  $("#authModeHint").textContent = signUp ? "Đã có tài khoản?" : "Chưa có tài khoản?";
+  authModeButton.textContent = signUp ? "Đăng nhập" : "Đăng ký";
+  authSubmit.textContent = signUp ? "Tạo tài khoản" : "Đăng nhập";
+  const { username, password, confirmation } = loginForm.elements;
+  password.value = "";
+  password.autocomplete = signUp ? "new-password" : "current-password";
+  password.minLength = signUp ? 12 : 0;
+  password.placeholder = signUp ? "Ít nhất 12 ký tự" : "Nhập mật khẩu";
+  confirmation.value = "";
+  confirmation.disabled = !signUp;
+  confirmation.required = signUp;
+  $("#confirmPasswordField").classList.toggle("hidden", !signUp);
+  loginError.textContent = "";
+  if (focus) username.focus();
+}
+
+function requestSession(path, options) {
+  const request = () => api(path, options);
+  return navigator.locks ? navigator.locks.request("pixel2plot-auth", request) : request();
+}
+
+authModeButton.addEventListener("click", () => setAuthMode(!registration, true));
+
+loginForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const submit = e.submitter || e.currentTarget.querySelector("button[type=submit]");
-  if (submit.disabled) return;
-  const f = new FormData(e.target);
-  submit.disabled = true;
-  $("#loginError").textContent = "";
+  if (authBusy) return;
+  const f = new FormData(loginForm);
+  const username = f.get("username").trim();
+  const password = f.get("password");
+  loginError.textContent = "";
+  if (registration && password !== f.get("confirmation")) {
+    loginError.textContent = "Hai mật khẩu chưa khớp.";
+    loginForm.elements.confirmation.focus();
+    return;
+  }
+  updateAuthControls(true);
   try {
-    const result = await api("/auth/login", { method: "POST", json: { username: f.get("username"), password: f.get("password") } });
-    e.target.reset();
+    const result = await requestSession(registration ? "/auth/register" : "/auth/login", { method: "POST", json: { username, password } });
+    loginForm.reset();
     openSession(result);
     sessionChannel.postMessage("login");
   } catch (err) {
-    $("#loginError").textContent = err.message;
+    loginError.textContent = err.message;
   } finally {
-    submit.disabled = false;
+    updateAuthControls(false);
+  }
+});
+
+googleButton.addEventListener("click", async () => {
+  if (authBusy || !googleAvailable) return;
+  loginError.textContent = "";
+  updateAuthControls(true);
+  try {
+    const { url } = await api("/auth/google/start", { method: "POST" });
+    location.assign(url);
+  } catch (err) {
+    loginError.textContent = err.message;
+    updateAuthControls(false);
   }
 });
 
@@ -184,8 +245,8 @@ function openSession({ context, user }) {
 function clearSession(message = "") {
   app.session = null;
   app.user = null;
-  $("#loginError").textContent = message;
-  $("#loginForm").elements.password.value = "";
+  setAuthMode(false);
+  loginError.textContent = message;
   clearMachineToken();
   $("#resetPassword").close();
   $("#resetPasswordForm").reset();
@@ -1833,14 +1894,45 @@ $$("input[type=range]").forEach((r) => {
   r.addEventListener("input", () => updateSliderTrack(r));
 });
 async function restoreSession() {
-  const button = $("#loginForm button[type=submit]");
-  button.disabled = true;
+  updateAuthControls(true);
+  const options = api("/auth/options")
+    .then(({ google }) => { googleAvailable = google; })
+    .catch(() => { googleAvailable = false; })
+    .finally(() => {
+      const note = $("#googleAuthNote");
+      note.hidden = googleAvailable;
+      if (!googleAvailable) note.textContent = "Google chưa được cấu hình cho địa chỉ này.";
+      googleButton.disabled = authBusy || !googleAvailable;
+    });
+  const url = new URL(location.href);
+  const google = url.searchParams.get("google");
+  if (google !== null) {
+    url.searchParams.delete("google");
+    history.replaceState(null, "", url);
+  }
+  const messages = {
+    cancelled: "Đã hủy đăng nhập Google.",
+    expired: "Lượt đăng nhập Google đã hết hạn. Vui lòng thử lại.",
+    failed: "Chưa xác thực được tài khoản Google. Vui lòng thử lại.",
+  };
+  let message = Object.hasOwn(messages, google) ? messages[google] : "";
   try {
+    if (google === "finish") {
+      try {
+        openSession(await requestSession("/auth/google/finish", { method: "POST" }));
+        sessionChannel.postMessage("login");
+        return;
+      } catch (err) {
+        message = err.message;
+      }
+    }
     openSession(await api("/auth/me"));
+    if (message) toast(message, "warn");
   } catch (err) {
-    clearSession(err.status === 401 ? "" : err.message);
+    clearSession(message || (err.status === 401 ? "" : err.message));
   } finally {
-    button.disabled = false;
+    await options;
+    updateAuthControls(false);
   }
 }
 

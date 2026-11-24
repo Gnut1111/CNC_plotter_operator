@@ -1,13 +1,20 @@
 # REST API & WebSocket
 
-Đăng nhập cấp cookie phiên `HttpOnly`, `SameSite=Strict` và `Secure` khi dùng HTTPS. Các API cần cookie và header `X-Session-Context` lấy từ phản hồi đăng nhập hoặc `/api/auth/me`. Riêng `/api/auth/me` chỉ cần cookie. Giá trị context liên kết yêu cầu với đúng phiên của tab, cookie dùng để xác thực.
+Đăng nhập cấp cookie phiên `HttpOnly`, `SameSite=Strict` và `Secure` khi dùng HTTPS. Các API ngoài nhóm xác thực cần cookie và header `X-Session-Context` lấy từ phản hồi đăng nhập hoặc `/api/auth/me`. Trong nhóm xác thực, `/api/auth/me` chỉ cần cookie, còn `/api/auth/logout` cần cả cookie và header. Giá trị context liên kết yêu cầu với đúng phiên của tab, cookie dùng để xác thực.
 
 ## Xác thực
 | Method | Path | Mô tả |
 |---|---|---|
+| GET | `/api/auth/options` | `{google}` cho biết Google có khả dụng trên origin hiện tại |
+| POST | `/api/auth/register` | `{username, password}` → đăng ký vai trò user và cấp phiên, trả 201. Tên đã dùng → 409 |
 | POST | `/api/auth/login` | `{username, password}` → `{context, user}`. Sai → 401, bị khóa → 403, đang đăng nhập ở thiết bị khác → 409, vượt giới hạn → 429 |
 | GET | `/api/auth/me` | `{context, user}` của phiên hiện tại |
 | POST | `/api/auth/logout` | Thu hồi phiên trên máy chủ và xóa cookie, trả 204 |
+| POST | `/api/auth/google/start` | Tạo lượt xác thực Google, trả `{url}` để trình duyệt chuyển trang |
+| GET | `/api/auth/google/callback` | Xác thực state, rồi chuyển về web |
+| POST | `/api/auth/google/finish` | Đổi mã OAuth một lần, xác thực ID token và cấp phiên, trả `{context, user}` |
+
+Đăng ký và các bước OAuth dùng cookie tương ứng của luồng. Google dùng Authorization Code với PKCE và nonce. Định danh Google được lưu riêng với tài khoản, không tự liên kết với tài khoản cũ theo tên đăng nhập.
 
 ## Bản vẽ (Image Uploader / Converter / G-code Viewer)
 | Method | Path | Mô tả |
