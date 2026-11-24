@@ -55,6 +55,7 @@ Phím tắt trong máy giả lập: `e` E-Stop · `l` chạm Limit · `o` rút W
 | `MQTT_HOST`, `MQTT_PORT` | `127.0.0.1`, `1883` |
 | `ADMIN_PASSWORD` | Dùng khi khởi tạo hoặc khi thay mật khẩu admin mặc định trong CSDL cũ |
 | `DEMO_MODE` | Tắt |
+| `PRESERVE_DEMO_PASSWORDS` | Tắt. Chỉ bật trên CSDL demo riêng nếu cần giữ mật khẩu mẫu của tài khoản đã có. |
 | `DATA_DIR` | `server/data`, chứa SQLite, ảnh và G-code |
 | `EMBEDDED_BROKER`, `MQTT_URL`, `SERVER_MQTT_PASS` | Broker nhúng bật. Khi dùng broker ngoài, cấu hình URL và mật khẩu kết nối nội bộ. |
 

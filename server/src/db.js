@@ -123,18 +123,20 @@ function provision() {
   }
   if (config.demoMode) return;
 
-  const account = db.prepare("SELECT id, password_hash FROM users WHERE username = ?");
-  const admin = account.get("admin");
-  const user = account.get("user");
-  const defaultAdmin = admin && bcrypt.compareSync("admin123", admin.password_hash);
-  if (defaultAdmin && !validPassword(password)) {
-    throw new Error("CSDL còn mật khẩu admin mặc định. Đặt ADMIN_PASSWORD mới trước khi khởi động.");
-  }
-  if (defaultAdmin) {
-    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(bcrypt.hashSync(password, 10), admin.id);
-  }
-  if (user && bcrypt.compareSync("user123", user.password_hash)) {
-    db.prepare("UPDATE users SET locked = 1, password_hash = ? WHERE id = ?").run(bcrypt.hashSync(newToken(), 10), user.id);
+  if (process.env.PRESERVE_DEMO_PASSWORDS !== "true") {
+    const account = db.prepare("SELECT id, password_hash FROM users WHERE username = ?");
+    const admin = account.get("admin");
+    const user = account.get("user");
+    const defaultAdmin = admin && bcrypt.compareSync("admin123", admin.password_hash);
+    if (defaultAdmin && !validPassword(password)) {
+      throw new Error("CSDL còn mật khẩu admin mặc định. Đặt ADMIN_PASSWORD mới trước khi khởi động.");
+    }
+    if (defaultAdmin) {
+      db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(bcrypt.hashSync(password, 10), admin.id);
+    }
+    if (user && bcrypt.compareSync("user123", user.password_hash)) {
+      db.prepare("UPDATE users SET locked = 1, password_hash = ? WHERE id = ?").run(bcrypt.hashSync(newToken(), 10), user.id);
+    }
   }
   const rotate = db.prepare("UPDATE machines SET token = ? WHERE id = ? AND token = ?");
   for (const id of ["cnc-01", "sim-01"]) rotate.run(newToken(), id, `${id}-token`);
