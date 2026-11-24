@@ -501,12 +501,13 @@
                   <p id="sizeHint" class="muted option-hint">Tối đa 120 × 80 mm. Ảnh giữ nguyên tỷ lệ khi vẽ.</p>
 
                   <div class="control-group">
-                    <label class="slider-label">
+                    <label class="slider-label" for="detailLevel">
                       <span>Mức chi tiết</span>
-                      <output id="detailVal" class="val-pill tabular-nums">5</output>
+                      <output id="detailVal" for="detailLevel" class="val-pill tabular-nums">5</output>
                     </label>
-                    <input type="range" name="detail" min="1" max="10" value="5" />
-                    <div class="range-labels muted"><span>Nhanh</span><span>Chi tiết</span></div>
+                    <input type="range" id="detailLevel" name="detail" min="1" max="10" value="5" />
+                    <div class="range-labels muted"><span>Ít chi tiết</span><span>Nhiều chi tiết</span></div>
+                    <p id="detailOverrideHint" class="muted option-hint" hidden>Đang dùng thông số nâng cao. Kéo thanh để tự tính lại phân giải và giản lược.</p>
                   </div>
 
                   <div class="control-group">

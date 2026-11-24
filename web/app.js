@@ -840,6 +840,10 @@ function updateSliderTrack(slider) {
 
 function updateFormLabels() {
   $("#detailVal").textContent = form.detail.value;
+  const hasDetailOverride = form.rasterPx.value !== "" || form.simplifyMm.value !== "";
+  $("#detailOverrideHint").hidden = !hasDetailOverride;
+  if (hasDetailOverride) form.detail.setAttribute("aria-describedby", "detailOverrideHint");
+  else form.detail.removeAttribute("aria-describedby");
   $("#thresholdVal").textContent = form.threshold.value;
   $("#thresholdRow").classList.toggle("hidden", form.thresholdMode.value !== "manual");
   const isFill = form.mode.value === "fill";
@@ -960,6 +964,11 @@ if (advancedDetails) {
 
 form.addEventListener("input", (event) => {
   if (event.target === fileInput) return;
+  if (event.target === form.detail) {
+    form.rasterPx.value = "";
+    form.simplifyMm.value = "";
+    if (view === "image") view = "paths";
+  }
   updateFormLabels();
   schedulePreview({ keepImage: true });
 });
