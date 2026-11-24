@@ -12,9 +12,9 @@ const rectangle = (a, b) => ({
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 export function mountDrawingEditor({
-  root, canvas, getArea, getPreview, isLocked, hasFile, selectPaths, redraw, onEdit, onStateChange,
+  root, options, canvas, getArea, getPreview, isLocked, hasFile, selectPaths, redraw, onEdit, onStateChange,
 }) {
-  const find = (id) => root.querySelector(`#${id}`);
+  const find = (id) => root.querySelector(`#${id}`) ?? options.querySelector(`#${id}`);
   const tools = [...root.querySelectorAll("[data-edit-tool]")];
   const undo = find("drawingUndo"), redo = find("drawingRedo");
   const history = find("drawingHistory"), versions = find("drawingVersions");
@@ -23,7 +23,7 @@ export function mountDrawingEditor({
   const status = find("drawingEditStatus");
   let current, past, future, archive;
   let camera = { zoom: 1, x: 0, y: 0 };
-  let tool = "", crop, gesture, overlay, selectedPaths = [];
+  let tool = "", crop, gesture, overlay, spaceDown = false, selectedPaths = [];
   let pathsFor, editsFor;
 
   function reset(state) {
@@ -33,6 +33,7 @@ export function mountDrawingEditor({
     future = state?.future ?? [];
     archive = state?.archive ?? [];
     tool = "";
+    spaceDown = false;
     pathsFor = null;
     selectedPaths = [];
     camera = { zoom: 1, x: 0, y: 0 };
@@ -43,6 +44,7 @@ export function mountDrawingEditor({
 
   const editable = () => !isLocked() && Boolean(getPreview()?.sourcePaths?.length);
   const currentEdits = () => current.edits;
+  const canPan = () => hasFile() && camera.zoom > 1;
 
   function activePaths() {
     const source = getPreview()?.sourcePaths;
@@ -59,34 +61,34 @@ export function mountDrawingEditor({
     root.hidden = !hasFile();
     const locked = isLocked();
     const ready = editable();
-    const canPan = !locked && hasFile() && camera.zoom > 1;
     for (const button of tools) {
-      const name = button.dataset.editTool;
-      button.disabled = name === "pan" ? !canPan : !ready || current.edits.length >= MAX_EDITS;
-      button.setAttribute("aria-pressed", String(tool === name));
+      button.disabled = !ready || current.edits.length >= MAX_EDITS;
+      button.setAttribute("aria-pressed", String(tool === button.dataset.editTool));
     }
     undo.disabled = locked || !past.length;
     redo.disabled = locked || !future.length;
     for (const item of versions.querySelectorAll("button")) {
       item.disabled = locked || item.getAttribute("aria-current") === "true";
     }
-    zoomOut.disabled = locked || camera.zoom === 1;
-    zoomIn.disabled = locked || !hasFile() || camera.zoom >= 5;
-    fit.disabled = locked || camera.zoom === 1;
+    zoomOut.disabled = Boolean(gesture) || camera.zoom === 1;
+    zoomIn.disabled = Boolean(gesture) || !hasFile() || camera.zoom >= 5;
+    fit.disabled = zoomOut.disabled;
     fit.textContent = `${Math.round(camera.zoom * 100)}%`;
     find("drawingBrush").hidden = tool !== "erase";
     brush.disabled = locked || !ready;
     find("drawingCropActions").hidden = tool !== "crop" || !crop;
     applyCrop.disabled = !ready || !crop || !validCrop(crop);
-    canvas.dataset.editTool = !gesture && !ready && tool !== "pan" ? "" : tool;
+    const activeTool = ready ? tool : "";
+    const mode = canPan() && (spaceDown || !activeTool) ? "pan" : activeTool;
+    canvas.dataset.editTool = gesture?.mode ?? mode;
     const message = current.edits.length >= MAX_EDITS
       ? "Bản này đã đạt giới hạn chỉnh sửa. Bạn vẫn có thể khôi phục một phiên bản trước."
       : {
           crop: crop ? "Kéo góc để chỉnh khung. Enter để áp dụng, Esc để hủy." : "Kéo để chọn vùng muốn giữ.",
           erase: "Kéo trên nét cần tẩy.",
           stroke: "Bấm vào nét đang được tô xanh để xóa cả nét.",
-          pan: "Kéo để di chuyển khung nhìn.",
         }[tool] ?? "";
+    options.hidden = !hasFile() || !message || locked;
     if (status.textContent !== message) status.textContent = message;
   }
 
@@ -163,7 +165,10 @@ export function mountDrawingEditor({
   function choose(name) {
     clearGesture();
     tool = name;
-    if (tool && tool !== "pan") selectPaths();
+    if (tool) {
+      selectPaths();
+      canvas.focus({ preventScroll: true });
+    }
     onStateChange();
     redraw();
   }
@@ -172,7 +177,6 @@ export function mountDrawingEditor({
     camera.zoom = clamp(zoom, 1, 5);
     if (camera.zoom === 1) {
       camera.x = camera.y = 0;
-      if (tool === "pan") tool = "";
     }
     sync();
     redraw();
@@ -215,35 +219,45 @@ export function mountDrawingEditor({
   }
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (!tool || event.button !== 0 || !event.isPrimary || isLocked()) return;
-    if (tool !== "pan" && !editable()) return;
+    if (!event.isPrimary || gesture) return;
+    const activeTool = editable() ? tool : "";
+    const pan = canPan() && (spaceDown || !activeTool || event.button === 1);
+    const mode = pan ? "pan" : activeTool;
+    if (!mode || (event.button !== 0 && !(pan && event.button === 1))) return;
     const point = toPoint(event);
-    if (tool !== "pan" && !point) return;
+    if (!pan && !point) return;
     canvas.focus({ preventScroll: true });
     event.preventDefault();
-    if (tool === "stroke") { perform({ type: "stroke", point }); return; }
-    gesture = { id: event.pointerId, start: point, cx: event.clientX, cy: event.clientY };
-    if (tool === "crop") gesture.start = cropAnchor(point);
-    if (tool === "erase") Object.assign(gesture, { points: [point], radius: radius() });
-    if (tool === "pan") Object.assign(gesture, { x: camera.x, y: camera.y });
+    if (mode === "stroke") { perform({ type: "stroke", point }); return; }
+    gesture = { mode, id: event.pointerId, start: point, cx: event.clientX, cy: event.clientY };
+    if (mode === "crop") gesture.start = cropAnchor(point);
+    if (mode === "erase") Object.assign(gesture, { points: [point], radius: radius() });
+    if (pan) {
+      Object.assign(gesture, { x: camera.x, y: camera.y });
+      if (tool !== "crop") overlay = null;
+    }
     canvas.setPointerCapture(event.pointerId);
     onStateChange();
   });
 
   function move(event) {
-    if (!tool || !event.isPrimary || isLocked()) return;
+    if (!event.isPrimary) return;
     if (gesture && gesture.id !== event.pointerId) return;
-    const point = toPoint(event, Boolean(gesture));
-    if (gesture && tool === "pan") {
+    if (gesture?.mode === "pan") {
       const { width, height, k } = canvasTransform(canvas, getArea(), camera);
       const area = getArea();
       const limitX = Math.max(0, (width + area.w * k) / 2 - 48);
       const limitY = Math.max(0, (height + area.h * k) / 2 - 48);
       camera.x = clamp(gesture.x + event.clientX - gesture.cx, -limitX, limitX);
       camera.y = clamp(gesture.y + event.clientY - gesture.cy, -limitY, limitY);
-    } else if (editable() && point) {
-      if (gesture && tool === "crop") overlay = crop = rectangle(gesture.start, point);
-      if (gesture && tool === "erase" && pointDistance(gesture.points.at(-1), point) >= 0.12) {
+      redraw();
+      return;
+    }
+    if (!tool || !editable() || (!gesture && spaceDown)) return;
+    const point = toPoint(event, Boolean(gesture));
+    if (point) {
+      if (gesture?.mode === "crop") overlay = crop = rectangle(gesture.start, point);
+      if (gesture?.mode === "erase" && pointDistance(gesture.points.at(-1), point) >= 0.12) {
         if (gesture.points.length === MAX_BRUSH_POINTS) {
           gesture.points = gesture.points.filter((_, i) => i % 2 === 0 || i === MAX_BRUSH_POINTS - 1);
         }
@@ -260,11 +274,11 @@ export function mountDrawingEditor({
     move(event);
     const finished = gesture;
     gesture = null;
-    if (tool === "erase") {
+    if (finished.mode === "erase") {
       overlay = null;
       perform({ type: "erase", points: finished.points, radius: finished.radius });
     }
-    if (tool === "crop" && crop && !validCrop(crop)) crop = overlay = null;
+    if (finished.mode === "crop" && crop && !validCrop(crop)) crop = overlay = null;
     onStateChange();
     redraw();
   });
@@ -286,6 +300,12 @@ export function mountDrawingEditor({
   find("drawingCancelCrop").onclick = () => { clearGesture(); onStateChange(); redraw(); };
 
   function keydown(event) {
+    if (event.code === "Space" && event.target === canvas && canPan()) {
+      event.preventDefault();
+      spaceDown = true;
+      sync();
+      return;
+    }
     if (isLocked()) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
       event.preventDefault();
@@ -300,13 +320,21 @@ export function mountDrawingEditor({
   }
   canvas.addEventListener("keydown", keydown);
   root.addEventListener("keydown", keydown);
+  options.addEventListener("keydown", keydown);
+  function releaseSpace() {
+    if (!spaceDown) return;
+    spaceDown = false;
+    sync();
+  }
+  window.addEventListener("keyup", (event) => { if (event.code === "Space") releaseSpace(); });
+  window.addEventListener("blur", releaseSpace);
 
   reset();
   return {
     reset, sync, currentEdits,
     get camera() { return camera; },
     get overlay() { return overlay; },
-    get busy() { return Boolean(gesture || crop); },
+    get busy() { return Boolean((gesture && gesture.mode !== "pan") || crop); },
     snapshot: () => ({ current, past: [...past], future: [...future], archive: [...archive] }),
     cancel: () => choose(""),
     cancelPending: clearGesture,

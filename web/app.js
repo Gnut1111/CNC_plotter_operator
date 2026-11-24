@@ -333,6 +333,7 @@ const formatPlaybackPercent = new Intl.NumberFormat("vi-VN", {
 });
 const drawingEditor = mountDrawingEditor({
   root: $("#drawingEditor"),
+  options: $("#drawingEditorOptions"),
   canvas,
   getArea: workArea,
   getPreview: () => preview,

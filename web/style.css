@@ -1504,12 +1504,6 @@ label.check input[type="checkbox"] {
     border-right: 1px solid #EBEBEB !important;
   }
 
-  .preview-wrap {
-    flex: 1 1 auto;
-    min-height: 0;
-    border-radius: 0 !important;
-  }
-
   .draw-sidebar {
     height: 100%;
     display: flex;
@@ -1553,6 +1547,15 @@ label.check input[type="checkbox"] {
 
 .draw-viewport {
   overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .draw-viewport { overflow-y: auto; scrollbar-gutter: stable; }
+  .draw-viewport > * { flex: 0 0 auto; }
+  .draw-viewport .preview-wrap {
+    height: clamp(280px, calc(100dvh - 335px), 680px);
+    border-radius: 0 !important;
+  }
 }
 
 .viewport-header {
@@ -3137,7 +3140,16 @@ dialog::backdrop {
   padding: 8px 14px;
   border-block: 1px solid var(--border-hairline);
 }
-.drawing-editor[hidden], .drawing-editor [hidden] { display: none; }
+#simulateBtn { min-inline-size: 111px; }
+.drawing-editor-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border-hairline);
+}
+.drawing-editor[hidden], .drawing-editor-options[hidden], .drawing-editor-options [hidden] { display: none; }
 .drawing-editor-row {
   display: flex;
   align-items: center;
@@ -3161,8 +3173,8 @@ dialog::backdrop {
   background: var(--bg-surface);
 }
 .drawing-versions button { display: block; width: 100%; text-align: left; white-space: normal; }
-.drawing-editor p { margin: 4px 0 0; font-size: .8rem; }
-.drawing-editor p:empty { display: none; }
+.drawing-editor-options p { margin: 0; font-size: .8rem; }
+.drawing-editor-options p:empty { display: none; }
 #drawingBrush, .drawing-crop-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 #drawingBrush[hidden] { display: none; }
 #drawingBrush input { width: 90px; margin: 0; }
