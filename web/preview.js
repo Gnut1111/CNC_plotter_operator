@@ -33,8 +33,16 @@ export function playbackPosition(moves, progress) {
   return { index: first, x: move.x + (move.nx - move.x) * part, y: move.y + (move.ny - move.y) * part, ink: move.ink };
 }
 
-export function paintPreview(canvas, { area, size, image, preview, view, showTravel, head }) {
+export function canvasTransform(canvas, area, camera = { zoom: 1, x: 0, y: 0 }) {
   const { width, height } = canvas.getBoundingClientRect();
+  const fit = Math.min((width - 52) / area.w, (height - 45) / area.h);
+  const k = fit * camera.zoom;
+  return { width, height, k, left: (width - area.w * k + 20) / 2 + camera.x,
+    top: (height - area.h * k - 18) / 2 + camera.y };
+}
+
+export function paintPreview(canvas, { area, size, image, preview, view, showTravel, head, camera, overlay }) {
+  const { width, height, k, left, top } = canvasTransform(canvas, area, camera);
   if (!width || !height) return;
   const scale = window.devicePixelRatio || 1;
   const pixelsWide = Math.round(width * scale), pixelsHigh = Math.round(height * scale);
@@ -44,10 +52,7 @@ export function paintPreview(canvas, { area, size, image, preview, view, showTra
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
-  const k = Math.min((width - 52) / area.w, (height - 45) / area.h);
   if (k <= 0) return;
-  const left = (width - area.w * k + 20) / 2;
-  const top = (height - area.h * k - 18) / 2;
   const X = (x) => left + x * k;
   const Y = (y) => top + (area.h - y) * k;
 
@@ -81,6 +86,54 @@ export function paintPreview(canvas, { area, size, image, preview, view, showTra
     ctx.fill();
     ctx.strokeStyle = head.ink ? "#171717" : "#EA580C";
     ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  if (overlay?.type === "crop") {
+    const { min, max } = overlay;
+    const x = X(min.x), y = Y(max.y), w = (max.x - min.x) * k, h = (max.y - min.y) * k;
+    ctx.fillStyle = "rgba(15, 23, 42, 0.22)";
+    ctx.beginPath();
+    ctx.rect(left, top, area.w * k, area.h * k);
+    ctx.rect(x, y, w, h);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = "#2563EB";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "#2563EB";
+    for (const cx of [x, x + w]) for (const cy of [y, y + h]) ctx.fillRect(cx - 3, cy - 3, 6, 6);
+  }
+  if (overlay?.type === "erase") {
+    const { point, radius } = overlay;
+    const points = overlay.points ?? [];
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 2 * radius * k;
+    ctx.strokeStyle = "#FFFFFF";
+    if (points.length) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(left, top, area.w * k, area.h * k);
+      ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(X(points[0].x), Y(points[0].y));
+      for (const p of points.slice(1)) ctx.lineTo(X(p.x), Y(p.y));
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.beginPath();
+    ctx.arc(X(point.x), Y(point.y), radius * k, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#2563EB";
+    ctx.stroke();
+  }
+  if (overlay?.type === "stroke" && overlay.path) {
+    const [first, ...rest] = overlay.path;
+    ctx.beginPath();
+    ctx.moveTo(X(first.x), Y(first.y));
+    for (const p of rest) ctx.lineTo(X(p.x), Y(p.y));
+    ctx.strokeStyle = "#2563EB";
+    ctx.lineWidth = Math.max(2, preview.params.penWidthMm * k + 1);
     ctx.stroke();
   }
 

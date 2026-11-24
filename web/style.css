@@ -3124,3 +3124,42 @@ dialog::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
+
+.drawing-editor {
+  position: relative;
+  padding: 8px 14px;
+  border-block: 1px solid var(--border-hairline);
+}
+.drawing-editor[hidden], .drawing-editor [hidden] { display: none; }
+.drawing-editor-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.drawing-editor-row + .drawing-editor-row { margin-top: 6px; }
+.drawing-editor-row > .segmented { flex-wrap: wrap; max-width: 100%; }
+.drawing-editor-row summary { cursor: pointer; padding: 4px 6px; }
+.drawing-versions {
+  position: absolute;
+  top: 100%;
+  left: 14px;
+  width: min(250px, calc(100% - 28px));
+  max-height: 245px;
+  overflow-y: auto;
+  z-index: 5;
+  padding: 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+.drawing-versions button { display: block; width: 100%; text-align: left; white-space: normal; }
+.drawing-editor p { margin: 4px 0 0; font-size: .8rem; }
+.drawing-editor p:empty { display: none; }
+#drawingBrush, .drawing-crop-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#drawingBrush[hidden] { display: none; }
+#drawingBrush input { width: 90px; margin: 0; }
+#preview:not([data-edit-tool=""])[data-edit-tool] { touch-action: none; cursor: crosshair; }
+#preview[data-edit-tool="pan"] { cursor: grab; }
+#preview[data-edit-tool="pan"]:active { cursor: grabbing; }
+#dropZone.is-empty #preview { visibility: hidden; }

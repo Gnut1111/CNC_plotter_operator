@@ -1,5 +1,6 @@
 import { readDraft, writeDraft, deleteDraft } from "./draft.js";
 import { paintPreview, playbackPosition, readMoves } from "./preview.js";
+import { mountDrawingEditor } from "./edit-workspace.js";
 
 // Pixel2Plot Operator — web client (ES module thuần, chạy thẳng trên trình duyệt)
 const $ = (s) => document.querySelector(s);
@@ -272,7 +273,7 @@ function saveDraft() {
   if (!app.user || !file) return;
   const token = app.token, epoch = ++draftEpoch;
   const settings = Object.fromEntries(draftControls().map((el) => [el.name, el.type === "checkbox" ? el.checked : el.value]));
-  writeDraft(userKey(), { file, settings, machineId: app.selectedMachine, sentId: sentJob?.id }).catch(() => {
+  writeDraft(userKey(), { file, settings, machineId: app.selectedMachine, sentId: sentJob?.id, editor: drawingEditor.snapshot() }).catch(() => {
     if (app.token === token && epoch === draftEpoch) $("#draftStatus").textContent = "Trình duyệt không lưu được bản nháp.";
   });
 }
@@ -293,7 +294,7 @@ async function restoreDraft() {
     }
     updateSizeLimits();
     updateFormLabels();
-    handleSelectedFile(draft.file);
+    handleSelectedFile(draft.file, draft.editor);
     if (draft.sentId) {
       sentJob = activeJob?.id === draft.sentId ? activeJob : { id: draft.sentId, status: "QUEUED" };
       saveDraft();
@@ -324,6 +325,26 @@ $("#discardDraft").onclick = async () => {
 
 const playback = { open: false, progress: 0, frame: null };
 const PLAYBACK_MS = 12000;
+const drawingEditor = mountDrawingEditor({
+  root: $("#drawingEditor"),
+  canvas,
+  getArea: workArea,
+  getPreview: () => preview,
+  isLocked: () => sending || Boolean(pendingSend || tuneRequest) || playback.open,
+  hasFile: () => Boolean(file),
+  selectPaths: () => selectView("paths"),
+  redraw: drawPreview,
+  onStateChange: syncActions,
+  onEdit: (paths) => {
+    if (preview) {
+      const ordered = paths.flatMap((path) => path.slice(1).map((point, i) => ({
+        x: path[i].x, y: path[i].y, nx: point.x, ny: point.y, ink: true,
+      })));
+      displayed = { ...preview, moves: { ordered } };
+    }
+    schedulePreview({ delay: 0, keepImage: true });
+  },
+});
 
 function workArea() {
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
@@ -357,11 +378,12 @@ function readParams() {
   return p;
 }
 
-function uploadData(params, machineId) {
+function uploadData(params, machineId, edits) {
   const fd = new FormData();
   fd.append("image", file);
   fd.append("params", JSON.stringify(params));
   if (machineId) fd.append("machineId", machineId);
+  if (edits?.length) fd.append("edits", JSON.stringify(edits));
   return fd;
 }
 
@@ -405,7 +427,8 @@ function drawPreview() {
   };
   const head = playback.open ? playbackPosition(preview.moves, playback.progress) : null;
   const showTravel = view === "paths" && $("#showTravel").checked;
-  paintPreview(canvas, { area, size, image: original, preview: displayed, view, head, showTravel });
+  paintPreview(canvas, { area, size, image: original, preview: displayed, view, head, showTravel,
+    camera: drawingEditor.camera, overlay: view === "paths" && !playback.open ? drawingEditor.overlay : null });
   if (head) {
     const percent = Math.floor(playback.progress * 100);
     const state = playback.progress === 1 ? "Đã về gốc" : head.ink ? "Bút đang vẽ" : "Bút nhấc";
@@ -481,6 +504,8 @@ function updateStepGuide() {
 }
 
 function syncActions() {
+  drawingEditor.sync();
+  const hasDrawing = Boolean(preview?.stats.paths) && !drawingEditor.busy;
   $("#pathsView").disabled = !file;
   $("#imageView").disabled = !original?.naturalWidth;
   $("#compareView").disabled = !displayed || !original?.naturalWidth;
@@ -488,17 +513,17 @@ function syncActions() {
     $("#" + id).setAttribute("aria-pressed", String(!playback.open && view === mode));
   }
   $("#showTravel").disabled = view !== "paths" || !displayed;
-  $("#simulateBtn").disabled = !playback.open && (!preview?.moves.distance || Boolean(tuneRequest) || sending);
+  $("#simulateBtn").disabled = !playback.open && (!hasDrawing || !preview?.moves.distance || Boolean(tuneRequest) || sending);
   $("#simulateBtn").setAttribute("aria-expanded", String(playback.open));
   $("#simulateBtn").textContent = playback.open ? "Đóng mô phỏng" : "Mô phỏng";
   $("#playbackControls").hidden = !playback.open;
   canvas.setAttribute("aria-label", playback.open ? "Mô phỏng đường bút" : {
     paths: "Đường vẽ theo tọa độ máy", image: "Ảnh gốc trong vùng vẽ", compare: "Đường bút chồng lên ảnh gốc",
   }[view]);
-  $("#downloadBtn").disabled = !preview;
-  $("#gcodeDetails").classList.toggle("hidden", !preview);
+  $("#downloadBtn").disabled = !hasDrawing;
+  $("#gcodeDetails").classList.toggle("hidden", !hasDrawing);
 
-  const canSend = !sending && (pendingSend ? !draftLoading : preview && app.selectedMachine && !sentJob && !tuneRequest);
+  const canSend = !sending && (pendingSend ? !draftLoading : hasDrawing && app.selectedMachine && !sentJob && !tuneRequest);
   $("#sendBtn").disabled = !canSend;
   $("#sendBtn").textContent = sending ? "Đang gửi…" : pendingSend ? "Xác nhận lại lần gửi" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
   $("#showSentJob").classList.toggle("hidden", !sentJob);
@@ -602,6 +627,7 @@ function clearTuneResult() {
 }
 
 function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = false, keepSubmission = false } = {}) {
+  drawingEditor.cancelPending();
   const current = ++revision;
   clearTimeout(previewTimer);
   previewTimer = null;
@@ -647,21 +673,29 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
 async function runPreview(current) {
   const controller = new AbortController();
   previewRequest = controller;
-  const params = readParams(), machineId = app.selectedMachine;
+  const params = readParams(), machineId = app.selectedMachine, edits = drawingEditor.currentEdits();
   try {
-    const result = await api("/drawings/preview", { method: "POST", body: uploadData(params, machineId), signal: controller.signal });
+    const result = await api("/drawings/preview", { method: "POST", body: uploadData(params, machineId, edits), signal: controller.signal });
     if (current !== revision) return;
-    preview = { ...result, requestParams: params, moves: readMoves(result.gcode, result.params) };
+    preview = { ...result, requestParams: params, edits, moves: readMoves(result.gcode, result.params) };
     displayed = preview;
     const { stats: s } = result;
-    const [left, bottom, right, top] = s.bbox;
-    $("#stats").textContent = [
+    const [left, bottom, right, top] = edits.length ? preview.moves.ordered.reduce((bounds, move) => {
+      if (move.ink) {
+        bounds[0] = Math.min(bounds[0], move.x, move.nx);
+        bounds[1] = Math.min(bounds[1], move.y, move.ny);
+        bounds[2] = Math.max(bounds[2], move.x, move.nx);
+        bounds[3] = Math.max(bounds[3], move.y, move.ny);
+      }
+      return bounds;
+    }, [Infinity, Infinity, -Infinity, -Infinity]) : s.bbox;
+    $("#stats").textContent = s.paths ? [
       `${Number((right - left).toFixed(1))} × ${Number((top - bottom).toFixed(1))} mm`,
-      `${s.paths} nét`, `ước tính ~${s.minutes} phút`, `độ khớp mô phỏng ${s.iou}%`,
-      `tách nét: ${METHOD_VI[s.binarize.method] || s.binarize.method}`,
-    ].join(" · ");
+      `${s.paths} nét`, `ước tính ~${s.minutes} phút`,
+      ...(edits.length ? [] : [`độ khớp mô phỏng ${s.iou}%`, `tách nét: ${METHOD_VI[s.binarize.method] || s.binarize.method}`]),
+    ].join(" · ") : "";
     $("#gcodeText").textContent = result.gcode.length > 200000 ? result.gcode.slice(0, 200000) + "\n…" : result.gcode;
-    $("#convertMsg").textContent = "Bản xem trước sẵn sàng.";
+    $("#convertMsg").textContent = s.paths ? "Bản xem trước sẵn sàng." : "Không còn nét vẽ. Hoàn tác hoặc chọn một phiên bản trước.";
     drawPreview();
   } catch (err) {
     if (current !== revision || err.name === "AbortError") return;
@@ -708,6 +742,7 @@ function updateFormLabels() {
 function resetWorkspace() {
   releaseOriginal();
   file = null;
+  drawingEditor.reset();
   restoredDraft = false;
   ++draftEpoch;
   $("#draftStatus").textContent = "";
@@ -730,7 +765,7 @@ function resetWorkspace() {
   schedulePreview();
 }
 
-function handleSelectedFile(newFile) {
+function handleSelectedFile(newFile, editorState) {
   if (sending || !newFile || pendingSend && file) return;
   const error = $("#fileError");
   const message = !["image/png", "image/jpeg"].includes(newFile.type)
@@ -741,6 +776,7 @@ function handleSelectedFile(newFile) {
   if (message) { fileInput.value = ""; return; }
   releaseOriginal();
   file = newFile;
+  drawingEditor.reset(editorState);
   view = "paths";
   if (restoredDraft) $("#draftStatus").textContent = "";
   restoredDraft = false;
@@ -824,11 +860,12 @@ $("#resetSettings").onclick = () => {
   schedulePreview({ delay: 0 });
 };
 $("#pathsView").onclick = () => selectView("paths");
-$("#imageView").onclick = () => selectView("image");
-$("#compareView").onclick = () => selectView("compare");
+$("#imageView").onclick = () => { drawingEditor.cancel(); selectView("image"); };
+$("#compareView").onclick = () => { drawingEditor.cancel(); selectView("compare"); };
 $("#simulateBtn").onclick = () => {
   if (playback.open) return selectView("paths");
-  if (!preview?.moves.distance) return;
+  if (!preview?.moves.distance || drawingEditor.busy) return;
+  drawingEditor.cancel();
   view = "paths";
   playback.open = true;
   syncActions();
@@ -981,7 +1018,7 @@ $("#autoResult").addEventListener("click", (event) => {
 });
 
 $("#downloadBtn").onclick = () => {
-  if (!preview) return;
+  if (!preview?.stats.paths || drawingEditor.busy) return;
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([preview.gcode], { type: "text/plain" }));
   link.download = (file ? file.name.replace(/\.[^.]+$/, "") : "drawing") + ".gcode";
@@ -991,7 +1028,7 @@ $("#downloadBtn").onclick = () => {
 
 $("#showSentJob").onclick = () => { if (sentJob) openJobDetails(sentJob.id); };
 $("#sendBtn").onclick = async () => {
-  if (sending || (pendingSend ? draftLoading : tuneRequest || sentJob || !preview || !app.selectedMachine)) return;
+  if (sending || (pendingSend ? draftLoading : tuneRequest || sentJob || !preview?.stats.paths || drawingEditor.busy || !app.selectedMachine)) return;
   const current = revision;
   const token = app.token;
   const machineId = app.selectedMachine;
@@ -1002,8 +1039,8 @@ $("#sendBtn").onclick = async () => {
     if (!pendingSend) {
       let drawingId = savedDrawingId;
       if (!drawingId) {
-        const { previewHash, requestParams } = preview;
-        const body = uploadData(requestParams, machineId);
+        const { previewHash, requestParams, edits } = preview;
+        const body = uploadData(requestParams, machineId, edits);
         body.append("previewHash", previewHash);
         const result = await api("/drawings", { method: "POST", body });
         if (app.token !== token) return;

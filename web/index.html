@@ -314,13 +314,46 @@
 
             <p id="fileError" class="error banner-error" role="alert" hidden></p>
 
+            <div id="drawingEditor" class="drawing-editor" aria-label="Công cụ chỉnh bản vẽ" hidden>
+              <div class="drawing-editor-row">
+                <div class="segmented" role="group" aria-label="Công cụ trên bàn vẽ">
+                  <button type="button" data-edit-tool="crop" aria-pressed="false">Cắt vùng</button>
+                  <button type="button" data-edit-tool="erase" aria-pressed="false">Tẩy</button>
+                  <button type="button" data-edit-tool="stroke" aria-pressed="false">Xóa nét</button>
+                  <button type="button" data-edit-tool="pan" aria-pressed="false">Kéo khung nhìn</button>
+                </div>
+                <div class="segmented" role="group" aria-label="Thu phóng bản vẽ">
+                  <button type="button" id="drawingZoomOut" aria-label="Thu nhỏ">−</button>
+                  <button type="button" id="drawingZoomReset" title="Vừa khung">100%</button>
+                  <button type="button" id="drawingZoomIn" aria-label="Phóng to">+</button>
+                </div>
+              </div>
+              <div class="drawing-editor-row">
+                <button type="button" class="small" id="drawingUndo" title="Ctrl hoặc Cmd + Z">Hoàn tác</button>
+                <button type="button" class="small" id="drawingRedo" title="Ctrl hoặc Cmd + Shift + Z">Làm lại</button>
+                <details id="drawingHistory">
+                  <summary>Lịch sử chỉnh sửa</summary>
+                  <div id="drawingVersions" class="drawing-versions"></div>
+                </details>
+                <label id="drawingBrush" hidden>Đường kính tẩy
+                  <input id="drawingBrushSize" type="range" min="0.5" max="20" step="0.5" value="4" />
+                  <output id="drawingBrushValue" for="drawingBrushSize">4 mm</output>
+                </label>
+                <div id="drawingCropActions" class="drawing-crop-actions" hidden>
+                  <button type="button" class="small" id="drawingApplyCrop">Áp dụng cắt</button>
+                  <button type="button" class="small" id="drawingCancelCrop">Hủy</button>
+                </div>
+              </div>
+              <p id="drawingEditStatus" class="muted" role="status"></p>
+            </div>
+
             <!-- Blueprint Stage (Clickable when empty) -->
             <div class="preview-wrap is-empty" id="dropZone" tabindex="0" role="region" aria-label="Bàn vẽ">
               <span class="corner-cross cross-tl" aria-hidden="true">+</span>
               <span class="corner-cross cross-tr" aria-hidden="true">+</span>
               <span class="corner-cross cross-bl" aria-hidden="true">+</span>
               <span class="corner-cross cross-br" aria-hidden="true">+</span>
-              <canvas id="preview" aria-label="Bản xem trước theo tọa độ máy"></canvas>
+              <canvas id="preview" tabindex="0" aria-label="Bản xem trước theo tọa độ máy"></canvas>
               <div id="emptyPreview" class="empty-state">
                 <div class="empty-halo-rings" aria-hidden="true"></div>
                 <div class="empty-glyph" aria-hidden="true">
