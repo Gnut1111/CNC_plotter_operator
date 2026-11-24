@@ -1,5 +1,6 @@
 import { readDraft, writeDraft, deleteDraft } from "./draft.js";
 import { paintPreview, playbackPosition, readMoves } from "./preview.js";
+import { mountDrawingEditor } from "./edit-workspace.js";
 
 // Pixel2Plot Operator — web client (ES module thuần, chạy thẳng trên trình duyệt)
 const $ = (s) => document.querySelector(s);
@@ -174,8 +175,12 @@ function logout() {
   setConnection(false, "Đang kết nối");
   app.machines = [];
   app.selectedMachine = null;
+  cachedJobs = [];
+  selectJobFilter("all");
+  updateJobFilterCounts();
   $("#machinePick").replaceChildren();
   $("#machineInfo")?.replaceChildren();
+  $("#machinesSummary")?.replaceChildren();
   $("#allJobs").checked = false;
   $("#jobDetails").close();
   $("#jobRows").replaceChildren();
@@ -272,7 +277,7 @@ function saveDraft() {
   if (!app.user || !file) return;
   const token = app.token, epoch = ++draftEpoch;
   const settings = Object.fromEntries(draftControls().map((el) => [el.name, el.type === "checkbox" ? el.checked : el.value]));
-  writeDraft(userKey(), { file, settings, machineId: app.selectedMachine, sentId: sentJob?.id }).catch(() => {
+  writeDraft(userKey(), { file, settings, machineId: app.selectedMachine, sentId: sentJob?.id, editor: drawingEditor.snapshot() }).catch(() => {
     if (app.token === token && epoch === draftEpoch) $("#draftStatus").textContent = "Trình duyệt không lưu được bản nháp.";
   });
 }
@@ -293,7 +298,7 @@ async function restoreDraft() {
     }
     updateSizeLimits();
     updateFormLabels();
-    handleSelectedFile(draft.file);
+    handleSelectedFile(draft.file, draft.editor);
     if (draft.sentId) {
       sentJob = activeJob?.id === draft.sentId ? activeJob : { id: draft.sentId, status: "QUEUED" };
       saveDraft();
@@ -322,8 +327,35 @@ $("#discardDraft").onclick = async () => {
   }
 };
 
-const playback = { open: false, progress: 0, frame: null };
+const playback = { open: false, progress: 0, frame: null, speed: 1, lastTime: 0 };
 const PLAYBACK_MS = 12000;
+const playbackScrubber = $("#playbackPosition");
+const playbackPercent = $("#playbackPercent");
+const playbackPenState = $("#playbackPenState");
+const formatPlaybackPercent = new Intl.NumberFormat("vi-VN", {
+  minimumFractionDigits: 1, maximumFractionDigits: 1,
+});
+const drawingEditor = mountDrawingEditor({
+  root: $("#drawingEditor"),
+  options: $("#drawingEditorOptions"),
+  canvas,
+  getArea: workArea,
+  getPreview: () => preview,
+  isLocked: () => sending || Boolean(pendingSend || tuneRequest) || playback.open,
+  hasFile: () => Boolean(file),
+  selectPaths: () => selectView("paths"),
+  redraw: drawPreview,
+  onStateChange: syncActions,
+  onEdit: (paths) => {
+    if (preview) {
+      const ordered = paths.flatMap((path) => path.slice(1).map((point, i) => ({
+        x: path[i].x, y: path[i].y, nx: point.x, ny: point.y, ink: true,
+      })));
+      displayed = { ...preview, moves: { ordered } };
+    }
+    schedulePreview({ delay: 0, keepImage: true });
+  },
+});
 
 function workArea() {
   const machine = app.machines.find((m) => m.id === app.selectedMachine);
@@ -357,11 +389,12 @@ function readParams() {
   return p;
 }
 
-function uploadData(params, machineId) {
+function uploadData(params, machineId, edits) {
   const fd = new FormData();
   fd.append("image", file);
   fd.append("params", JSON.stringify(params));
   if (machineId) fd.append("machineId", machineId);
+  if (edits?.length) fd.append("edits", JSON.stringify(edits));
   return fd;
 }
 
@@ -386,15 +419,21 @@ function closePlayback() {
 
 function playPlayback() {
   if (playback.progress === 1) playback.progress = 0;
-  const start = performance.now() - playback.progress * PLAYBACK_MS;
+  playback.lastTime = performance.now();
   const advance = (now) => {
-    playback.progress = Math.min(1, Math.max(0, (now - start) / PLAYBACK_MS));
-    drawPreview();
+    updatePlayback(now);
     if (playback.progress === 1) pausePlayback();
     else playback.frame = requestAnimationFrame(advance);
   };
   $("#playbackBtn").textContent = "Tạm dừng";
   playback.frame = requestAnimationFrame(advance);
+}
+
+function updatePlayback(now) {
+  const elapsed = Math.max(0, now - playback.lastTime);
+  playback.lastTime += elapsed;
+  playback.progress = Math.min(1, playback.progress + elapsed * playback.speed / PLAYBACK_MS);
+  drawPreview();
 }
 
 function drawPreview() {
@@ -405,13 +444,16 @@ function drawPreview() {
   };
   const head = playback.open ? playbackPosition(preview.moves, playback.progress) : null;
   const showTravel = view === "paths" && $("#showTravel").checked;
-  paintPreview(canvas, { area, size, image: original, preview: displayed, view, head, showTravel });
+  paintPreview(canvas, { area, size, image: original, preview: displayed, view, head, showTravel,
+    camera: drawingEditor.camera, overlay: view === "paths" && !playback.open ? drawingEditor.overlay : null });
   if (head) {
-    const percent = Math.floor(playback.progress * 100);
+    const percent = Math.floor(playback.progress * 1000) / 10;
     const state = playback.progress === 1 ? "Đã về gốc" : head.ink ? "Bút đang vẽ" : "Bút nhấc";
-    $("#playbackPosition").value = Math.round(playback.progress * 1000);
-    const status = `${percent}% · ${state}`;
-    if ($("#playbackStatus").textContent !== status) $("#playbackStatus").textContent = status;
+    playbackScrubber.value = Math.round(playback.progress * Number(playbackScrubber.max));
+    updateSliderTrack(playbackScrubber);
+    const label = `${formatPlaybackPercent.format(percent)}%`;
+    if (playbackPercent.textContent !== label) playbackPercent.textContent = label;
+    if (playbackPenState.textContent !== state) playbackPenState.textContent = state;
     return;
   }
   const hasFile = Boolean(file);
@@ -453,7 +495,6 @@ function updateStepGuide() {
     return;
   }
 
-  // Only show the guide bar when there is genuinely helpful context or a warning (no noise when ready & online!)
   if (!file) {
     nextStepGuide.hidden = false;
     nextStepGuide.classList.add("guide-subtle");
@@ -481,6 +522,8 @@ function updateStepGuide() {
 }
 
 function syncActions() {
+  drawingEditor.sync();
+  const hasDrawing = Boolean(preview?.stats.paths) && !drawingEditor.busy;
   $("#pathsView").disabled = !file;
   $("#imageView").disabled = !original?.naturalWidth;
   $("#compareView").disabled = !displayed || !original?.naturalWidth;
@@ -488,17 +531,17 @@ function syncActions() {
     $("#" + id).setAttribute("aria-pressed", String(!playback.open && view === mode));
   }
   $("#showTravel").disabled = view !== "paths" || !displayed;
-  $("#simulateBtn").disabled = !playback.open && (!preview?.moves.distance || Boolean(tuneRequest) || sending);
+  $("#simulateBtn").disabled = !playback.open && (!hasDrawing || !preview?.moves.distance || Boolean(tuneRequest) || sending);
   $("#simulateBtn").setAttribute("aria-expanded", String(playback.open));
   $("#simulateBtn").textContent = playback.open ? "Đóng mô phỏng" : "Mô phỏng";
   $("#playbackControls").hidden = !playback.open;
   canvas.setAttribute("aria-label", playback.open ? "Mô phỏng đường bút" : {
     paths: "Đường vẽ theo tọa độ máy", image: "Ảnh gốc trong vùng vẽ", compare: "Đường bút chồng lên ảnh gốc",
   }[view]);
-  $("#downloadBtn").disabled = !preview;
-  $("#gcodeDetails").classList.toggle("hidden", !preview);
+  $("#downloadBtn").disabled = !hasDrawing;
+  $("#gcodeDetails").classList.toggle("hidden", !hasDrawing);
 
-  const canSend = !sending && (pendingSend ? !draftLoading : preview && app.selectedMachine && !sentJob && !tuneRequest);
+  const canSend = !sending && (pendingSend ? !draftLoading : hasDrawing && app.selectedMachine && !sentJob && !tuneRequest);
   $("#sendBtn").disabled = !canSend;
   $("#sendBtn").textContent = sending ? "Đang gửi…" : pendingSend ? "Xác nhận lại lần gửi" : sentJob ? `Đã gửi #${sentJob.id}` : "Gửi bản vẽ";
   $("#showSentJob").classList.toggle("hidden", !sentJob);
@@ -602,6 +645,7 @@ function clearTuneResult() {
 }
 
 function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = false, keepSubmission = false } = {}) {
+  drawingEditor.cancelPending();
   const current = ++revision;
   clearTimeout(previewTimer);
   previewTimer = null;
@@ -647,21 +691,29 @@ function schedulePreview({ delay = 260, keepTuneResult = false, keepImage = fals
 async function runPreview(current) {
   const controller = new AbortController();
   previewRequest = controller;
-  const params = readParams(), machineId = app.selectedMachine;
+  const params = readParams(), machineId = app.selectedMachine, edits = drawingEditor.currentEdits();
   try {
-    const result = await api("/drawings/preview", { method: "POST", body: uploadData(params, machineId), signal: controller.signal });
+    const result = await api("/drawings/preview", { method: "POST", body: uploadData(params, machineId, edits), signal: controller.signal });
     if (current !== revision) return;
-    preview = { ...result, requestParams: params, moves: readMoves(result.gcode, result.params) };
+    preview = { ...result, requestParams: params, edits, moves: readMoves(result.gcode, result.params) };
     displayed = preview;
     const { stats: s } = result;
-    const [left, bottom, right, top] = s.bbox;
-    $("#stats").textContent = [
+    const [left, bottom, right, top] = edits.length ? preview.moves.ordered.reduce((bounds, move) => {
+      if (move.ink) {
+        bounds[0] = Math.min(bounds[0], move.x, move.nx);
+        bounds[1] = Math.min(bounds[1], move.y, move.ny);
+        bounds[2] = Math.max(bounds[2], move.x, move.nx);
+        bounds[3] = Math.max(bounds[3], move.y, move.ny);
+      }
+      return bounds;
+    }, [Infinity, Infinity, -Infinity, -Infinity]) : s.bbox;
+    $("#stats").textContent = s.paths ? [
       `${Number((right - left).toFixed(1))} × ${Number((top - bottom).toFixed(1))} mm`,
-      `${s.paths} nét`, `ước tính ~${s.minutes} phút`, `độ khớp mô phỏng ${s.iou}%`,
-      `tách nét: ${METHOD_VI[s.binarize.method] || s.binarize.method}`,
-    ].join(" · ");
+      `${s.paths} nét`, `ước tính ~${s.minutes} phút`,
+      ...(edits.length ? [] : [`độ khớp mô phỏng ${s.iou}%`, `tách nét: ${METHOD_VI[s.binarize.method] || s.binarize.method}`]),
+    ].join(" · ") : "";
     $("#gcodeText").textContent = result.gcode.length > 200000 ? result.gcode.slice(0, 200000) + "\n…" : result.gcode;
-    $("#convertMsg").textContent = "Bản xem trước sẵn sàng.";
+    $("#convertMsg").textContent = s.paths ? "Bản xem trước sẵn sàng." : "Không còn nét vẽ. Hoàn tác hoặc chọn một phiên bản trước.";
     drawPreview();
   } catch (err) {
     if (current !== revision || err.name === "AbortError") return;
@@ -708,6 +760,7 @@ function updateFormLabels() {
 function resetWorkspace() {
   releaseOriginal();
   file = null;
+  drawingEditor.reset();
   restoredDraft = false;
   ++draftEpoch;
   $("#draftStatus").textContent = "";
@@ -730,7 +783,7 @@ function resetWorkspace() {
   schedulePreview();
 }
 
-function handleSelectedFile(newFile) {
+function handleSelectedFile(newFile, editorState) {
   if (sending || !newFile || pendingSend && file) return;
   const error = $("#fileError");
   const message = !["image/png", "image/jpeg"].includes(newFile.type)
@@ -741,6 +794,7 @@ function handleSelectedFile(newFile) {
   if (message) { fileInput.value = ""; return; }
   releaseOriginal();
   file = newFile;
+  drawingEditor.reset(editorState);
   view = "paths";
   if (restoredDraft) $("#draftStatus").textContent = "";
   restoredDraft = false;
@@ -760,6 +814,12 @@ fileInput.addEventListener("change", () => {
 });
 fileInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") fileInput.click();
+});
+
+// Close history popover on outside click
+document.addEventListener("click", (e) => {
+  const hist = $("#drawingHistory");
+  if (hist?.open && !hist.contains(e.target)) hist.open = false;
 });
 
 // Drag & drop + click-to-upload when empty
@@ -824,11 +884,12 @@ $("#resetSettings").onclick = () => {
   schedulePreview({ delay: 0 });
 };
 $("#pathsView").onclick = () => selectView("paths");
-$("#imageView").onclick = () => selectView("image");
-$("#compareView").onclick = () => selectView("compare");
+$("#imageView").onclick = () => { drawingEditor.cancel(); selectView("image"); };
+$("#compareView").onclick = () => { drawingEditor.cancel(); selectView("compare"); };
 $("#simulateBtn").onclick = () => {
   if (playback.open) return selectView("paths");
-  if (!preview?.moves.distance) return;
+  if (!preview?.moves.distance || drawingEditor.busy) return;
+  drawingEditor.cancel();
   view = "paths";
   playback.open = true;
   syncActions();
@@ -839,10 +900,17 @@ $("#playbackBtn").onclick = () => {
   if (playback.frame === null) playPlayback();
   else pausePlayback();
 };
-$("#playbackPosition").oninput = (event) => {
-  playback.progress = Number(event.target.value) / 1000;
+playbackScrubber.oninput = () => {
+  playback.progress = playbackScrubber.valueAsNumber / Number(playbackScrubber.max);
   pausePlayback();
   drawPreview();
+};
+$("#playbackSpeed").onchange = (event) => {
+  if (playback.frame !== null) {
+    updatePlayback(performance.now());
+    if (playback.progress === 1) pausePlayback();
+  }
+  playback.speed = Number(event.target.value);
 };
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) pausePlayback();
@@ -981,7 +1049,7 @@ $("#autoResult").addEventListener("click", (event) => {
 });
 
 $("#downloadBtn").onclick = () => {
-  if (!preview) return;
+  if (!preview?.stats.paths || drawingEditor.busy) return;
   const link = document.createElement("a");
   link.href = URL.createObjectURL(new Blob([preview.gcode], { type: "text/plain" }));
   link.download = (file ? file.name.replace(/\.[^.]+$/, "") : "drawing") + ".gcode";
@@ -991,7 +1059,7 @@ $("#downloadBtn").onclick = () => {
 
 $("#showSentJob").onclick = () => { if (sentJob) openJobDetails(sentJob.id); };
 $("#sendBtn").onclick = async () => {
-  if (sending || (pendingSend ? draftLoading : tuneRequest || sentJob || !preview || !app.selectedMachine)) return;
+  if (sending || (pendingSend ? draftLoading : tuneRequest || sentJob || !preview?.stats.paths || drawingEditor.busy || !app.selectedMachine)) return;
   const current = revision;
   const token = app.token;
   const machineId = app.selectedMachine;
@@ -1002,8 +1070,8 @@ $("#sendBtn").onclick = async () => {
     if (!pendingSend) {
       let drawingId = savedDrawingId;
       if (!drawingId) {
-        const { previewHash, requestParams } = preview;
-        const body = uploadData(requestParams, machineId);
+        const { previewHash, requestParams, edits } = preview;
+        const body = uploadData(requestParams, machineId, edits);
         body.append("previewHash", previewHash);
         const result = await api("/drawings", { method: "POST", body });
         if (app.token !== token) return;
@@ -1048,7 +1116,7 @@ $("#sendBtn").onclick = async () => {
   }
 };
 
-// ---------------- Machine Selector (Zero Repetition) ----------------
+// ---------------- Machine Selector & Hardware Fleet View ----------------
 async function loadMachines() {
   const token = app.token;
   const previous = app.selectedMachine;
@@ -1106,47 +1174,161 @@ function renderMachineInfo() {
     : '<span class="muted">Chưa chọn máy</span>';
 }
 
-function renderMachineCards() {
-  const container = $("#machineCards");
-  if (!container) return;
-  container.innerHTML = app.machines.map((m) => `
-    <div class="card machine-card">
-      <div class="machine-card-head">
-        <div>
-          <h2>${esc(m.name)}</h2>
-          <code class="machine-id-pill">${esc(m.id)}</code>
-        </div>
-        ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
-      </div>
-      <div class="machine-metrics-grid">
-        <div class="machine-metric">
-          <span class="metric-label">Vùng vẽ</span>
-          <span class="metric-value tabular-nums">${m.work_width} × ${m.work_height} mm</span>
-        </div>
-        <div class="machine-metric">
-          <span class="metric-label">Hàng đợi</span>
-          <span class="metric-value tabular-nums">${m.queued}</span>
-        </div>
-        <div class="machine-metric">
-          <span class="metric-label">Tín hiệu cuối</span>
-          <span class="metric-value tabular-nums">${m.last_seen ? new Date(m.last_seen).toLocaleTimeString("vi-VN") : "—"}</span>
-        </div>
-      </div>
-    </div>`).join("");
+function machineBedSvg(m) {
+  const maxW = 92, maxH = 56;
+  const ratio = (m.work_width || 120) / (m.work_height || 80);
+  const w = ratio >= maxW / maxH ? maxW : Math.max(36, Math.round(maxH * ratio));
+  const h = ratio >= maxW / maxH ? Math.max(28, Math.round(maxW / ratio)) : maxH;
+  const x = Math.round((116 - w) / 2);
+  const y = Math.round((74 - h) / 2);
+  const dotColor = m.online ? "#10B981" : "#EF4444";
+  return `
+    <svg class="machine-bed-svg" viewBox="0 0 116 74" width="116" height="74" fill="none" aria-hidden="true">
+      <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="#FFFFFF" stroke="#D4D4D8" stroke-width="1"/>
+      <line x1="${x + Math.round(w / 3)}" y1="${y}" x2="${x + Math.round(w / 3)}" y2="${y + h}" stroke="rgba(0,0,0,0.05)" stroke-width="1"/>
+      <line x1="${x + Math.round(w * 2 / 3)}" y1="${y}" x2="${x + Math.round(w * 2 / 3)}" y2="${y + h}" stroke="rgba(0,0,0,0.05)" stroke-width="1"/>
+      <line x1="${x}" y1="${y + Math.round(h / 2)}" x2="${x + w}" y2="${y + Math.round(h / 2)}" stroke="rgba(0,0,0,0.05)" stroke-width="1"/>
+      <circle cx="${x + 6}" cy="${y + h - 6}" r="2.2" fill="#171717"/>
+      <circle cx="${x + w - 7}" cy="${y + 7}" r="3" fill="${dotColor}"/>
+    </svg>`;
 }
 
-// ---------------- Job List + Job Control ----------------
+function renderMachineCards() {
+  const container = $("#machineCards");
+  const summary = $("#machinesSummary");
+  if (summary) {
+    const total = app.machines.length;
+    const online = app.machines.filter((m) => m.online).length;
+    const queued = app.machines.reduce((acc, m) => acc + (Number(m.queued) || 0), 0);
+    summary.innerHTML = total ? `
+      <span class="fleet-pill"><strong>${total}</strong> thiết bị</span>
+      <span class="fleet-pill fleet-pill-ok"><i class="fleet-dot"></i><strong>${online}</strong> trực tuyến</span>
+      <span class="fleet-pill"><strong>${queued}</strong> đang chờ</span>
+    ` : "";
+  }
+  if (!container) return;
+  if (!app.machines.length) {
+    container.innerHTML = '<div class="empty-inline muted">Chưa có máy vẽ nào được cấu hình.</div>';
+    return;
+  }
+  container.innerHTML = app.machines.map((m) => {
+    const isSelected = app.selectedMachine === m.id;
+    return `
+    <article class="machine-row-card ${m.online ? "is-online" : "is-offline"} ${isSelected ? "is-selected" : ""}">
+      <div class="machine-bed-preview">
+        ${machineBedSvg(m)}
+      </div>
+      <div class="machine-row-main">
+        <div class="machine-row-top">
+          <div class="machine-identity">
+            <h2>${esc(m.name)}</h2>
+            <code class="machine-id-pill">${esc(m.id)}</code>
+          </div>
+          ${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}
+        </div>
+        <dl class="machine-specs-inline">
+          <div>
+            <dt>Vùng vẽ</dt>
+            <dd class="tabular-nums">${m.work_width} × ${m.work_height} mm</dd>
+          </div>
+          <div>
+            <dt>Hàng đợi</dt>
+            <dd class="tabular-nums">${m.queued} phiên</dd>
+          </div>
+          <div>
+            <dt>Tín hiệu cuối</dt>
+            <dd class="tabular-nums">${m.last_seen ? new Date(m.last_seen).toLocaleTimeString("vi-VN") : "Chưa kết nối"}</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="machine-row-action">
+        <button type="button" class="small ${isSelected ? "" : "primary"}" data-use-machine="${esc(m.id)}">
+          ${isSelected ? "Đang chọn · Mở bàn vẽ" : "Vẽ trên máy này →"}
+        </button>
+      </div>
+    </article>`;
+  }).join("");
+}
+
+$("#machineCards")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-use-machine]");
+  if (!btn) return;
+  const id = btn.dataset.useMachine;
+  if (app.selectedMachine !== id) {
+    if (sending || pendingSend) return;
+    app.selectedMachine = id;
+    if (file) {
+      sentJob = null;
+      savedDrawingId = null;
+    }
+    renderMachinePick();
+    machineChanged();
+  }
+  showTab("draw");
+});
+
+// ---------------- Job List + Client Status Filters + Job Control ----------------
 let jobsRequest = 0;
+let cachedJobs = [];
+let jobFilter = "all";
 const pendingJobActions = new Set();
 const jobsBody = $("#jobRows");
 const jobDetails = $("#jobDetails");
+
+function matchesJobFilter(job, filter) {
+  if (filter === "all") return true;
+  if (filter === "active") return ["QUEUED", "SENDING", "READY", "DRAWING", "PAUSED"].includes(job.status);
+  if (filter === "done") return job.status === "COMPLETED";
+  if (filter === "ended") return ["CANCELLED", "FAILED"].includes(job.status);
+  return true;
+}
+
+function updateJobFilterCounts() {
+  const counts = {
+    all: cachedJobs.length,
+    active: cachedJobs.filter((j) => matchesJobFilter(j, "active")).length,
+    done: cachedJobs.filter((j) => matchesJobFilter(j, "done")).length,
+    ended: cachedJobs.filter((j) => matchesJobFilter(j, "ended")).length,
+  };
+  if ($("#jobCountAll")) $("#jobCountAll").textContent = String(counts.all);
+  if ($("#jobCountActive")) $("#jobCountActive").textContent = String(counts.active);
+  if ($("#jobCountDone")) $("#jobCountDone").textContent = String(counts.done);
+  if ($("#jobCountEnded")) $("#jobCountEnded").textContent = String(counts.ended);
+}
+
+function renderJobsTable() {
+  updateJobFilterCounts();
+  const visible = cachedJobs.filter((j) => matchesJobFilter(j, jobFilter));
+  const emptyText = cachedJobs.length
+    ? "Không có phiên vẽ nào thuộc trạng thái này."
+    : "Chưa có phiên vẽ nào.";
+  jobsBody.innerHTML = visible.map(jobRow).join("")
+    || `<tr><td colspan="8" class="muted table-empty-cell">${emptyText}</td></tr>`;
+}
+
+function selectJobFilter(filter) {
+  jobFilter = filter;
+  $$("#jobFilterBar .filter-chip").forEach((b) => {
+    const active = b.dataset.jobFilter === jobFilter;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-selected", String(active));
+  });
+}
+
+$("#jobFilterBar")?.addEventListener("click", (e) => {
+  const chip = e.target.closest("button[data-job-filter]");
+  if (!chip) return;
+  selectJobFilter(chip.dataset.jobFilter);
+  renderJobsTable();
+});
 
 async function loadJobs() {
   const request = ++jobsRequest, token = app.token;
   const all = $("#allJobs").checked ? "?all=1" : "";
   const { jobs } = await api(`/jobs${all}`);
   if (request !== jobsRequest || token !== app.token) return;
-  jobsBody.innerHTML = jobs.map(jobRow).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:28px;">Chưa có phiên vẽ nào.</td></tr>`;
+  cachedJobs = jobs;
+  renderJobsTable();
 }
 
 $("#allJobs").onchange = () => loadJobs().catch((err) => toast(err.message, "err"));
@@ -1187,7 +1369,7 @@ function jobRow(j) {
     <td class="col-mach">${esc(j.machine_name)}</td>
     <td class="col-user">${esc(j.username)}</td>
     <td class="col-status">${badge(j.cancel_requested ? "CANCEL_REQUESTED" : j.status)}${jobNotice(j) ? `<span class="status-subnote">${esc(jobNotice(j))}</span>` : ""}</td>
-    <td class="col-progress"><div class="bar"><span style="width:${progress}%" class="${progress >= 100 ? "bar-complete" : ""}"></span></div><small class="tabular-nums progress-pct-label">${progress}%</small></td>
+    <td class="col-progress"><div class="progress-inline"><div class="bar"><span style="width:${progress}%" class="${progress >= 100 ? "bar-complete" : ""}"></span></div><small class="tabular-nums progress-pct-label">${progress}%</small></div></td>
     <td class="col-time"><small class="tabular-nums">${formatDate(j.created_at)}</small></td>
     <td class="col-actions"><div class="job-actions">${actions}</div></td>
   </tr>`;
@@ -1317,8 +1499,17 @@ jobsBody.addEventListener("click", async (event) => {
 });
 
 function replaceJobRow(job) {
+  const idx = cachedJobs.findIndex((item) => item.id === job.id);
+  if (idx >= 0) {
+    cachedJobs[idx] = { ...cachedJobs[idx], ...job };
+    updateJobFilterCounts();
+  }
   const row = $(`#job-${job.id}`);
   if (!row) return false;
+  if (!matchesJobFilter(job, jobFilter)) {
+    renderJobsTable();
+    return true;
+  }
   const focus = row.contains(document.activeElement) ? document.activeElement : null;
   row.outerHTML = jobRow(job);
   if (focus) {
@@ -1335,19 +1526,23 @@ async function loadAdmin() {
   const token = app.token;
   const [{ machines }, { users }, { jobs }] = await Promise.all([api("/admin/machines"), api("/admin/users"), api("/admin/queue")]);
   if (token !== app.token) return;
+  if ($("#admMachinesCount")) $("#admMachinesCount").textContent = String(machines.length);
+  if ($("#admUsersCount")) $("#admUsersCount").textContent = String(users.length);
+  if ($("#admQueueCount")) $("#admQueueCount").textContent = String(jobs.length);
+
   $("#admMachines").innerHTML = machines.map((m) => `<tr>
     <td><code>${esc(m.id)}</code></td><td><strong>${esc(m.name)}</strong></td><td>${badge(m.needs_inspection && m.online ? "INSPECTION" : m.state)}${m.enabled ? "" : " · Tắt"}</td>
     <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><code>${esc(m.token)}</code></td>
-    <td><div class="admin-row-actions">${m.needs_inspection && m.online && m.state === "IDLE"
+    <td class="col-actions"><div class="admin-row-actions">${m.needs_inspection && m.online && m.state === "IDLE"
           ? `<button class="small" data-m="${esc(m.id)}" data-a="inspection">Xác nhận đã kiểm tra giấy</button>` : ""}
         <button class="small ghost" data-m="${esc(m.id)}" data-a="home">Về gốc</button>
         <button class="small ghost" data-m="${esc(m.id)}" data-a="token">Đổi token</button>
         <button class="small ${m.enabled ? "danger" : "ghost"}" data-m="${esc(m.id)}" data-a="toggle" data-en="${m.enabled}">${m.enabled ? "Tắt" : "Bật"}</button></div></td></tr>`).join("");
   $("#admUsers").innerHTML = users.map((u) => `<tr>
-    <td class="tabular-nums">${u.id}</td><td><strong>${esc(u.username)}</strong></td><td><code>${u.role}</code></td><td>${u.locked ? badge("FAILED").replace("Lỗi", "Đã khóa") : badge("IDLE").replace("Sẵn sàng", "Hoạt động")}</td>
-    <td><button class="small ${u.locked ? "ghost" : "danger"}" data-u="${u.id}" data-locked="${u.locked}">${u.locked ? "Mở khóa" : "Khóa"}</button></td></tr>`).join("");
-  $("#admQueue").innerHTML = jobs.map((j) => `<tr><td class="tabular-nums">${j.id}</td><td><code>${esc(j.machine_id)}</code></td><td>${esc(j.drawing_name)}</td><td>${esc(j.username)}</td><td>${badge(j.status)}</td></tr>`).join("")
-    || `<tr><td colspan="5" class="muted" style="text-align:center;padding:20px;">Hàng đợi hệ thống đang trống.</td></tr>`;
+    <td class="col-id tabular-nums">${u.id}</td><td><strong>${esc(u.username)}</strong></td><td><code>${u.role}</code></td><td>${u.locked ? badge("FAILED").replace("Lỗi", "Đã khóa") : badge("IDLE").replace("Sẵn sàng", "Hoạt động")}</td>
+    <td class="col-actions"><div class="admin-row-actions"><button class="small ${u.locked ? "ghost" : "danger"}" data-u="${u.id}" data-locked="${u.locked}">${u.locked ? "Mở khóa" : "Khóa"}</button></div></td></tr>`).join("");
+  $("#admQueue").innerHTML = jobs.map((j) => `<tr><td class="col-id tabular-nums">${j.id}</td><td><code>${esc(j.machine_id)}</code></td><td>${esc(j.drawing_name)}</td><td>${esc(j.username)}</td><td>${badge(j.status)}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted table-empty-cell">Hàng đợi hệ thống đang trống.</td></tr>`;
 }
 
 $("#admMachines").addEventListener("click", async (e) => {

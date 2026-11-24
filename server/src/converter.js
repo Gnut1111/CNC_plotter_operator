@@ -805,11 +805,16 @@ async function assessGcode(buffer, gcode, input, workArea) {
  * @param {object} input tham số người dùng
  * @param {{width:number,height:number}} workArea vùng vẽ của máy (mm)
  */
-async function convert(buffer, input, workArea, { refParams } = {}) {
+async function convert(buffer, input, workArea, { refParams, edits, includePaths = false } = {}) {
   workArea = limitArea(workArea);
   const p = normalizeParams(input, workArea);
+  const pathEditor = edits === undefined ? null : await import("../../web/path-edits.mjs");
+  if (pathEditor && !pathEditor.validateEdits(edits, workArea.width, workArea.height)) {
+    throw new Error("Vùng chỉnh sửa không hợp lệ hoặc nằm ngoài bàn vẽ.");
+  }
   const gray = await loadGray(buffer, maxSizeFor(p));
-  const { tf, paths, info } = buildFromGray(gray, p, workArea);
+  const { tf, paths: sourcePaths, info } = buildFromGray(gray, p, workArea);
+  const paths = pathEditor ? pathEditor.applyEdits(sourcePaths, edits) : sourcePaths;
   // Các giá trị "auto" được thay bằng giá trị đã chọn để người dùng thấy và chạy lại được
   const used = { ...p, threshold: info.method === "adaptive" ? "adaptive" : info.level, invert: info.invert };
   // refParams: chấm điểm theo một ảnh tham chiếu cố định (để so sánh công bằng giữa các cấu hình)
@@ -824,7 +829,7 @@ async function convert(buffer, input, workArea, { refParams } = {}) {
     imageSize: [gray.width, gray.height],
     bbox: [tf.offX, tf.offY, tf.offX + gray.width * tf.scale, tf.offY + gray.height * tf.scale].map((v) => Math.round(v * 10) / 10),
   };
-  return { gcode, params: used, stats };
+  return { gcode, params: used, stats, ...(includePaths ? { sourcePaths } : {}) };
 }
 
 /** Search shape first, then refine the best candidates against the same ink mask. */

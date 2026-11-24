@@ -68,10 +68,13 @@ router.post("/drawings/auto", upload.single("image"), wrap(async (req, res) => {
   res.json(result);
 }));
 
-async function convertUpload(req, res) {
-  const result = await processUpload(req, res, convert);
+async function convertUpload(req, res, { preview = false } = {}) {
+  const result = await processUpload(req, res, (image, params, area) => convert(image, params, area, {
+    includePaths: preview,
+    edits: typeof req.body.edits === "string" ? JSON.parse(req.body.edits) : undefined,
+  }));
   if (!result) return null;
-  if (result.stats.paths) return result;
+  if (result.stats.paths || (preview && result.sourcePaths.length)) return result;
   res.status(422).json({ error: "Không tìm thấy nét vẽ. Thử đổi cách tách nét hoặc đảo màu." });
   return null;
 }
@@ -79,7 +82,7 @@ async function convertUpload(req, res) {
 const hashGcode = (gcode) => createHash("sha256").update(gcode).digest("hex");
 
 router.post("/drawings/preview", upload.single("image"), wrap(async (req, res) => {
-  const result = await convertUpload(req, res);
+  const result = await convertUpload(req, res, { preview: true });
   if (result) res.json({ ...result, previewHash: hashGcode(result.gcode) });
 }));
 
