@@ -173,14 +173,45 @@ export function mountDrawingEditor({
     redraw();
   }
 
-  function setZoom(zoom) {
+  function panTo(x, y) {
+    const area = getArea();
+    const { width, height, k } = canvasTransform(canvas, area, camera);
+    const limitX = Math.max(0, (width + area.w * k) / 2 - 48);
+    const limitY = Math.max(0, (height + area.h * k) / 2 - 48);
+    camera.x = clamp(x, -limitX, limitX);
+    camera.y = clamp(y, -limitY, limitY);
+  }
+
+  function setZoom(zoom, anchor) {
+    const area = getArea();
+    const before = anchor ? canvasTransform(canvas, area, camera) : null;
     camera.zoom = clamp(zoom, 1, 5);
     if (camera.zoom === 1) {
       camera.x = camera.y = 0;
+    } else if (before?.k > 0) {
+      const after = canvasTransform(canvas, area, camera);
+      const ratio = after.k / before.k;
+      panTo(
+        camera.x + anchor.x - (after.left + (anchor.x - before.left) * ratio),
+        camera.y + anchor.y - (after.top + (anchor.y - before.top) * ratio),
+      );
+    } else {
+      panTo(camera.x, camera.y);
     }
     sync();
     redraw();
   }
+
+  canvas.addEventListener("wheel", (event) => {
+    if (!hasFile() || !event.deltaY || gesture) return;
+    event.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1;
+    const delta = clamp(event.deltaY * unit, -160, 160);
+    setZoom(camera.zoom * Math.exp(-delta * 0.0025), {
+      x: event.clientX - rect.left, y: event.clientY - rect.top,
+    });
+  }, { passive: false });
 
   function toPoint(event, constrain = false) {
     const area = getArea();
@@ -244,12 +275,7 @@ export function mountDrawingEditor({
     if (!event.isPrimary) return;
     if (gesture && gesture.id !== event.pointerId) return;
     if (gesture?.mode === "pan") {
-      const { width, height, k } = canvasTransform(canvas, getArea(), camera);
-      const area = getArea();
-      const limitX = Math.max(0, (width + area.w * k) / 2 - 48);
-      const limitY = Math.max(0, (height + area.h * k) / 2 - 48);
-      camera.x = clamp(gesture.x + event.clientX - gesture.cx, -limitX, limitX);
-      camera.y = clamp(gesture.y + event.clientY - gesture.cy, -limitY, limitY);
+      panTo(gesture.x + event.clientX - gesture.cx, gesture.y + event.clientY - gesture.cy);
       redraw();
       return;
     }
