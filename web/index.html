@@ -500,26 +500,6 @@
                   </div>
                   <p id="sizeHint" class="muted option-hint">Tối đa 120 × 80 mm. Ảnh giữ nguyên tỷ lệ khi vẽ.</p>
 
-                  <div class="control-group">
-                    <label class="slider-label" for="detailLevel">
-                      <span>Mức chi tiết</span>
-                      <output id="detailVal" for="detailLevel" class="val-pill tabular-nums">5</output>
-                    </label>
-                    <input type="range" id="detailLevel" name="detail" min="1" max="10" value="5" />
-                    <div class="range-labels muted"><span>Ít chi tiết</span><span>Nhiều chi tiết</span></div>
-                    <p id="detailOverrideHint" class="muted option-hint" hidden>Đang dùng thông số nâng cao. Kéo thanh để tự tính lại phân giải và giản lược.</p>
-                  </div>
-
-                  <div class="control-group">
-                    <label>Kiểu nét
-                      <select name="mode">
-                        <option value="centerline">Đường tâm</option>
-                        <option value="outline">Đường viền</option>
-                        <option value="fill">Viền và tô gạch</option>
-                      </select>
-                    </label>
-                  </div>
-
                   <!-- Single Prominent Auto-Tune CTA + Progressive Live Cards -->
                   <div class="auto-tune-box">
                     <button type="button" id="autoBtn" class="auto-cta-btn" disabled>
@@ -537,6 +517,16 @@
                     <div id="autoResult" class="auto-result" aria-live="polite"></div>
                   </div>
 
+                  <div class="control-group">
+                    <label>Kiểu nét
+                      <select name="mode">
+                        <option value="centerline">Đường tâm</option>
+                        <option value="outline">Đường viền</option>
+                        <option value="fill">Viền và tô gạch</option>
+                      </select>
+                    </label>
+                  </div>
+
                   <!-- Advanced Accordion (Grouped 2-column compact layout) -->
                   <details id="advancedOptions" class="advanced-details">
                     <summary>
@@ -546,6 +536,16 @@
                     <div class="advanced-inner">
                       <div class="adv-section">
                         <div class="adv-section-label">Xử lý ảnh &amp; tách nét</div>
+                        <div class="control-group">
+                          <label class="slider-label" for="detailLevel">
+                            <span>Mức chi tiết đường vẽ</span>
+                            <output id="detailVal" for="detailLevel" class="val-pill tabular-nums">10</output>
+                          </label>
+                          <input type="range" id="detailLevel" name="detail" min="1" max="10" value="10" aria-describedby="detailHint" />
+                          <div class="range-labels muted"><span>Giản lược nét</span><span>Giữ nhiều chi tiết</span></div>
+                          <p id="detailHint" class="muted option-hint">Giảm mức để giản lược nét và thường rút ngắn thời gian vẽ.</p>
+                          <p id="detailOverrideHint" class="muted option-hint" hidden>Đang dùng phân giải và giản lược nâng cao. Kéo thanh để tự tính lại.</p>
+                        </div>
                         <div class="form-row">
                           <label>Tách nét
                             <select name="thresholdMode">

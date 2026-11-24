@@ -27,7 +27,7 @@
 | GET | `/api/drawings/:id/image` | Ảnh gốc |
 | GET | `/api/converter/defaults` | Tham số mặc định |
 
-`params`: `widthMm, heightMm, detail (1–10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), simplifyMm (mm, null để suy ra từ detail), hatchRatio (0,6–1 lần bề rộng bút), fillStrategy ("legacy" | "inset-x" | "inset-y"), rasterPx (210–1280 px, null để suy ra từ detail), despeckle (bool), penWidthMm`. Có thể thêm `drawFeed` 60–900, `controlledTravelFeed` 60–2400 hoặc bỏ trống để dùng rapid, `penLiftZ` 0,1–5 và `penLowerFeed` 60–300. Server giới hạn các giá trị và tự sinh lệnh bút tương ứng.
+`params`: `widthMm, heightMm, detail (1–10, mặc định 10), threshold ("auto" | "adaptive" | 1–254), invert ("auto" | true | false), mode ("centerline" | "outline" | "fill"), smoothing (0–3), simplifyMm (mm, null để suy ra từ detail), hatchRatio (0,6–1 lần bề rộng bút), fillStrategy ("legacy" | "inset-x" | "inset-y"), rasterPx (210–1280 px, null để suy ra từ detail), despeckle (bool), penWidthMm`. Có thể thêm `drawFeed` 60–900, `controlledTravelFeed` 60–2400 hoặc bỏ trống để dùng rapid, `penLiftZ` 0,1–5 và `penLowerFeed` 60–300. Server giới hạn các giá trị và tự sinh lệnh bút tương ứng.
 
 `stats` / `metrics` gồm `iou` (% diện tích giao/hợp), `inkRecall` (% mực gốc phủ đúng), `inkPrecision` (% mực đầu ra nằm đúng vị trí), `coverage` / `precision` có dung sai, `score` (80% IoU + 20% F1 theo dung sai), `chamferMm`, `extraMm`, `missMm`, `minutes`, `paths`, `drawLengthMm`, `travelMm`. Vòng kiểm tra cuối phát lại G-code và chấm trên ảnh tham chiếu cạnh dài 960 px.
 
