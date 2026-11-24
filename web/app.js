@@ -176,7 +176,8 @@ function logout() {
   app.machines = [];
   app.selectedMachine = null;
   cachedJobs = [];
-  jobFilter = "all";
+  selectJobFilter("all");
+  updateJobFilterCounts();
   $("#machinePick").replaceChildren();
   $("#machineInfo")?.replaceChildren();
   $("#machinesSummary")?.replaceChildren();
@@ -1254,6 +1255,7 @@ $("#machineCards")?.addEventListener("click", (e) => {
   if (!btn) return;
   const id = btn.dataset.useMachine;
   if (app.selectedMachine !== id) {
+    if (sending || pendingSend) return;
     app.selectedMachine = id;
     if (file) {
       sentJob = null;
@@ -1304,15 +1306,19 @@ function renderJobsTable() {
     || `<tr><td colspan="8" class="muted table-empty-cell">${emptyText}</td></tr>`;
 }
 
-$("#jobFilterBar")?.addEventListener("click", (e) => {
-  const chip = e.target.closest("button[data-job-filter]");
-  if (!chip) return;
-  jobFilter = chip.dataset.jobFilter;
+function selectJobFilter(filter) {
+  jobFilter = filter;
   $$("#jobFilterBar .filter-chip").forEach((b) => {
-    const active = b === chip;
+    const active = b.dataset.jobFilter === jobFilter;
     b.classList.toggle("active", active);
     b.setAttribute("aria-selected", String(active));
   });
+}
+
+$("#jobFilterBar")?.addEventListener("click", (e) => {
+  const chip = e.target.closest("button[data-job-filter]");
+  if (!chip) return;
+  selectJobFilter(chip.dataset.jobFilter);
   renderJobsTable();
 });
 
