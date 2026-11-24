@@ -160,6 +160,9 @@ test("single active session, revocation, access isolation and machine credential
   assert.equal((await api("/auth/me", { session: newPasswordSession })).status, 401);
   await readLogin(await login("user", "replacement-fixture-password"));
 
+  const homePath = "/admin/machines/cnc-01/home";
+  assert.equal((await api(homePath, { session: admin, method: "POST" })).status, 409);
+  assert.equal((await api(homePath, { session: other, method: "POST" })).status, 403);
   const adminMachines = await api("/admin/machines", { session: admin });
   assert.ok((await adminMachines.json()).machines.every((m) => !("token" in m)));
   const tokenPath = "/admin/machines/sim-01/token";

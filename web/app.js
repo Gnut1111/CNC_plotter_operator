@@ -330,12 +330,6 @@ $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
 
 // ---------------- Drawing workspace ----------------
 const form = $("#convertForm");
-let isFormInert = false;
-Object.defineProperty(form, "inert", {
-  get() { return isFormInert; },
-  set(val) { isFormInert = Boolean(val); },
-  configurable: true,
-});
 const canvas = $("#preview");
 const fileInput = $("#sourceFile");
 const MODE_VI = { centerline: "Đường tâm", outline: "Đường viền", fill: "Viền + gạch" };
@@ -1637,7 +1631,7 @@ async function loadAdmin() {
     <td class="tabular-nums">${m.work_width}×${m.work_height}</td><td><button type="button" class="small ghost" data-m="${esc(m.id)}" data-a="show-token">Xem token</button></td>
     <td class="col-actions"><div class="admin-row-actions">${m.needs_inspection && m.online && m.state === "IDLE"
           ? `<button class="small" data-m="${esc(m.id)}" data-a="inspection">Xác nhận đã kiểm tra giấy</button>` : ""}
-        <button class="small ghost" data-m="${esc(m.id)}" data-a="home">Về gốc</button>
+        <button class="small ghost" data-m="${esc(m.id)}" data-a="home" ${m.enabled && m.online && ["IDLE", "ERROR"].includes(m.state) ? "" : "disabled"}>Về gốc</button>
         <button class="small ghost" data-m="${esc(m.id)}" data-a="token">Đổi token</button>
         <button class="small ${m.enabled ? "danger" : "ghost"}" data-m="${esc(m.id)}" data-a="toggle" data-en="${m.enabled}">${m.enabled ? "Tắt" : "Bật"}</button></div></td></tr>`).join("");
   $("#admUsers").innerHTML = users.map((u) => `<tr>

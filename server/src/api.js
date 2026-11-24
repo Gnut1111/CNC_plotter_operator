@@ -278,6 +278,12 @@ admin.post("/machines/:id/token", (req, res) => {
 admin.post("/machines/:id/home", wrap(async (req, res) => {
   const m = publicMachine(req.params.id);
   if (!m) return res.status(404).json({ error: "Không tìm thấy máy" });
+  if (!m.enabled || !m.online) {
+    return res.status(409).json({ error: "Máy cần được bật và kết nối trước khi về gốc." });
+  }
+  if (!["IDLE", "ERROR"].includes(m.state) || machineBusy(m.id)) {
+    return res.status(409).json({ error: "Máy đang bận. Chờ phiên kết thúc trước khi về gốc." });
+  }
   await dispatcher.publish(`cnc/${m.id}/cmd`, { cmd: "HOME" });
   res.json({ ok: true });
 }));

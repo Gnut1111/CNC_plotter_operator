@@ -53,7 +53,7 @@ Trạng thái phiên: `QUEUED → SENDING → READY → DRAWING ⇄ PAUSED → C
 | PATCH | `/api/admin/machines/:id` | Đổi tên, bật/tắt, vùng vẽ. Tắt quyền kết nối khi máy đang xử lý phiên → 409 |
 | GET | `/api/admin/machines/:id/token` | Xem token của một máy |
 | POST | `/api/admin/machines/:id/token` | Cấp lại token, ngắt kết nối đã xác thực bằng token cũ. Máy đang xử lý phiên → 409 |
-| POST | `/api/admin/machines/:id/home` | Gửi lệnh về gốc |
+| POST | `/api/admin/machines/:id/home` | Gửi lệnh về gốc. Máy phải trực tuyến và ở trạng thái rảnh hoặc lỗi, không có phiên đang xử lý. Nếu máy chưa sẵn sàng, trả 409. |
 | GET/POST | `/api/admin/users` | Xem / tạo tài khoản |
 | PATCH | `/api/admin/users/:id` | Khóa/mở khóa hoặc đổi vai trò và thu hồi phiên khi có thay đổi |
 | POST | `/api/admin/users/:id/revoke-sessions` | Thu hồi phiên của tài khoản |
